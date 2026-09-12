@@ -515,6 +515,29 @@ docker run --rm --network host hello-world
 경로를 피합니다. 대신 내려받기가 느리고 저장 공간을 훨씬 많이 씁니다. 다른
 드라이버로 만든 이미지와 컨테이너는 디스크에 남아 있다가 되돌리면 다시 보입니다.
 
+### 컨테이너 포트가 연결은 받는데 응답이 없음
+
+Android는 프로세스의 UID가 `AID_INET` 그룹(GID 3003)에 속할 때만 네트워크 송신을
+허용합니다. 많은 이미지가 권한을 일반 사용자로 낮추기 때문에, 컨테이너가 TCP 연결을
+수락하고 요청까지 ACK한 뒤 응답을 전혀 내보내지 못합니다. 클라이언트에서는 거절이
+아니라 멈춤으로 보입니다.
+
+DawnShell의 관리형 `docker` 래퍼가 `run`과 `create`, 그리고 자동 생성하는
+`compose` override에 `--group-add 3003`을 넣습니다. 정책을 적용한 뒤 오래 떠 있던
+컨테이너는 한 번 다시 만들어야 반영됩니다. `/usr/bin/docker`를 직접 부르면 래퍼를
+건너뛰므로 그때는 직접 `--group-add 3003`을 붙이세요.
+
+### 응답 헤더는 오는데 본문이 오지 않음
+
+일부 Android Wi-Fi 드라이버는 zero-copy `sendfile()` 전송을 조용히 버립니다.
+루프백과 Tailscale 같은 VPN 인터페이스는 영향을 받지 않아서, 같은 서비스가 tailnet
+주소로는 되고 LAN 주소로만 멈추는 현상이 나옵니다. Wi-Fi 인터페이스를 패킷 캡처하면
+요청은 ACK되는데 응답 세그먼트가 아예 나가지 않는 것이 보입니다.
+
+서비스에서 `sendfile`을 끄세요. nginx는 `http`, `server`, `location` 블록에
+`sendfile off;`를 넣으면 되고, Apache는 `EnableSendfile Off`입니다. CPU를 조금 더
+쓰는 것 외에 다른 변경은 필요 없습니다.
+
 일반 **중지**가 `supervisor_did_not_release_lock`으로 끝나면 홈 화면의
 **멈춘 감독 프로세스 강제 종료**를 사용할 수 있습니다. 이 기능은 저장된 PID
 숫자만 믿지 않고 프로세스 시작 시각과 실행 파일 inode를 다시 확인한 뒤 Debian

@@ -421,6 +421,31 @@ overlayfs, so it avoids the kernel path that fails. Pulls are slower and use far
 more storage. Images and containers created under the other driver stay on disk
 and reappear when you switch back.
 
+### A container port accepts connections but never answers
+
+Android only lets a process reach the network when its UID belongs to the
+`AID_INET` group, GID 3003. Many images drop privileges to a non-root user, so
+the container accepts the TCP connection and acknowledges the request, then never
+transmits a reply. From the client this looks like a hang rather than a refusal.
+
+DawnShell's managed `docker` wrapper adds `--group-add 3003` to `run` and
+`create`, and to the `compose` override it generates. Recreate long-running
+containers once after applying the policy so they pick it up. Calling
+`/usr/bin/docker` directly bypasses the wrapper, so pass `--group-add 3003`
+yourself there.
+
+### Response headers arrive but the body never does
+
+Some Android Wi-Fi drivers silently drop zero-copy `sendfile()` transmissions.
+Loopback and VPN interfaces such as Tailscale are unaffected, which is why the
+same service can work over a tailnet address and stall over the LAN address. A
+packet capture on the Wi-Fi interface shows the request being acknowledged and no
+response segment on the wire.
+
+Disable `sendfile` in the service. For nginx, add `sendfile off;` to the
+`http`, `server`, or `location` block. Apache uses `EnableSendfile Off`.
+This costs a little CPU and needs no other change.
+
 If normal **Stop** ends with `supervisor_did_not_release_lock`, use
 **Force-stop stuck supervisor** on the Home page. It does not trust a PID number
 alone: it revalidates the process start time and executable inode before sending

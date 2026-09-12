@@ -309,7 +309,7 @@ if (( ${#arguments[@]} > 0 )); then
                             if printf '%s\n' "$declared" | grep -Fxq "$service"; then
                                 continue
                             fi
-                            printf '  %s:\n    ipc: host\n' "$service"
+                            printf '  %s:\n    ipc: host\n    group_add:\n      - "3003"\n' "$service"
                         done <<< "$services"
                     } > "$override"
                     # Compose keeps its own project discovery, so only the
@@ -326,14 +326,28 @@ fi
 
 if (( command_index >= 0 )); then
     explicit_ipc=false
+    explicit_inet_group=false
+    previous=""
     for argument in "${arguments[@]}"; do
         case "$argument" in
             --ipc|--ipc=*) explicit_ipc=true ;;
+            --group-add=3003) explicit_inet_group=true ;;
         esac
+        if [ "$previous" = --group-add ] && [ "$argument" = 3003 ]; then
+            explicit_inet_group=true
+        fi
+        previous="$argument"
     done
-    if [ "$explicit_ipc" = false ]; then
+    injected=()
+    [ "$explicit_ipc" = true ] || injected+=(--ipc=host)
+    # Android blocks outbound traffic from UIDs without AID_INET (GID 3003).
+    # Images that drop privileges to a non-root user therefore accept the
+    # connection but never transmit a reply. The supplementary group restores
+    # network access without granting root inside the container.
+    [ "$explicit_inet_group" = true ] || injected+=(--group-add 3003)
+    if (( ${#injected[@]} > 0 )); then
         rewritten=("${arguments[@]:0:$((command_index + 1))}")
-        rewritten+=(--ipc=host)
+        rewritten+=("${injected[@]}")
         rewritten+=("${arguments[@]:$((command_index + 1))}")
         exec "$real_docker" "${rewritten[@]}"
     fi
@@ -348,7 +362,7 @@ EOF_DOCKER_WRAPPER
     printf '%s\n' "$new_wrapper_hash" > "$docker_wrapper_hash"
     chown 0:0 "$docker_wrapper_hash"
     chmod 0600 "$docker_wrapper_hash"
-    echo "POLICY: Docker run/create wrapper enables --ipc=host by default"
+    echo "POLICY: Docker run/create wrapper enables --ipc=host and --group-add 3003 (Android AID_INET) by default"
     echo "WARNING: containers share Android/Debian host IPC; use /usr/bin/docker to bypass"
 }
 

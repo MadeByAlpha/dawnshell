@@ -53,13 +53,24 @@ assert_arguments() {
 }
 
 run_wrapper run --rm hello-world
-assert_arguments run --ipc=host --rm hello-world
+assert_arguments run --ipc=host --group-add 3003 --rm hello-world
 
 run_wrapper create --ipc=private alpine true
-assert_arguments create --ipc=private alpine true
+assert_arguments create --group-add 3003 --ipc=private alpine true
 
 run_wrapper container run --name demo alpine true
-assert_arguments container run --ipc=host --name demo alpine true
+assert_arguments container run --ipc=host --group-add 3003 --name demo alpine true
+
+# An explicit Android AID_INET group must not be duplicated, in either form.
+run_wrapper run --group-add 3003 alpine true
+assert_arguments run --ipc=host --group-add 3003 alpine true
+
+run_wrapper run --group-add=3003 alpine true
+assert_arguments run --ipc=host --group-add=3003 alpine true
+
+# A different supplementary group must still receive the Android one.
+run_wrapper run --group-add video alpine true
+assert_arguments run --ipc=host --group-add 3003 --group-add video alpine true
 
 run_wrapper info
 assert_arguments info

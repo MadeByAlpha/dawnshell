@@ -63,7 +63,10 @@ grep -Fq 'switching image stores preserves existing data' "$policy_script"
 grep -Fq 'cgroup_driver=cgroupfs' "$policy_script"
 # shellcheck disable=SC2016 # Assert literal shell source, not this test's variables.
 grep -Fq 'host_ipc_compatibility=$host_ipc_compatibility' "$policy_script"
-grep -Fq 'rewritten+=(--ipc=host)' "$policy_script"
+grep -Fq 'injected+=(--ipc=host)' "$policy_script"
+# Android drops outbound traffic from container UIDs without AID_INET.
+grep -Fq 'injected+=(--group-add 3003)' "$policy_script"
+grep -Fq 'group_add:' "$policy_script"
 # Host IPC must be the default rather than an opt-in switch.
 grep -Fq 'KEY_DOCKER_HOST_IPC_COMPATIBILITY, true' \
     "$repo_dir/app/src/main/java/me/aroxu/dawnshell/BfuPreferences.java"
