@@ -27,25 +27,28 @@ final class DockerNetworkProvisioner {
     private static final String REVISION_FILE = "docker-network-policy.revision";
     // Increment whenever an already-managed rootfs must receive a new
     // compatibility setting without requiring the user to toggle a setting.
-    private static final int MANAGED_CONFIGURATION_REVISION = 2;
+    private static final int MANAGED_CONFIGURATION_REVISION = 3;
     private static final int MAX_TAIL_BYTES = 48 * 1024;
     private static final Object FILE_LOCK = new Object();
 
     private DockerNetworkProvisioner() {}
 
     static boolean apply(Context context, BfuRuntime.Layout layout, String policy,
-                         boolean hostIpcCompatibility) {
+                         boolean hostIpcCompatibility, String storageDriver) {
         Context deContext = BfuPreferences.deviceProtectedContext(context);
         LogSink log = null;
         Process process = null;
         try {
             String validated = validatePolicy(policy);
+            String validatedStorage = validateStorageDriver(storageDriver);
             log = new LogSink(logFile(deContext));
             log.line("============================================================");
             log.line("STAGE: Applying Docker network policy requested=" + validated
-                    + " host_ipc_compatibility=" + hostIpcCompatibility);
+                    + " host_ipc_compatibility=" + hostIpcCompatibility
+                    + " storage_driver=" + validatedStorage);
             writeStatus(deContext, "RUNNING requested=" + validated
-                    + " host_ipc_compatibility=" + hostIpcCompatibility);
+                    + " host_ipc_compatibility=" + hostIpcCompatibility
+                    + " storage_driver=" + validatedStorage);
 
             String command = "/system/bin/sh "
                     + BfuSu.shellQuote(
@@ -56,7 +59,8 @@ final class DockerNetworkProvisioner {
                     + " " + BfuSu.shellQuote(
                     layout.architecture.debianArchitecture)
                     + " " + BfuSu.shellQuote(
-                    Boolean.toString(hostIpcCompatibility));
+                    Boolean.toString(hostIpcCompatibility))
+                    + " " + BfuSu.shellQuote(validatedStorage);
             BfuSu.StartedProcess started = BfuSu.start(command);
             process = started.process;
             log.line("Magisk command accepted by " + started.command);
@@ -113,10 +117,12 @@ final class DockerNetworkProvisioner {
     }
 
     static void recordQueued(Context context, String policy,
-                             boolean hostIpcCompatibility) {
+                             boolean hostIpcCompatibility,
+                             String storageDriver) {
         Context deContext = BfuPreferences.deviceProtectedContext(context);
         String message = "Docker policy queued: requested=" + validatePolicy(policy)
-                + " host_ipc_compatibility=" + hostIpcCompatibility;
+                + " host_ipc_compatibility=" + hostIpcCompatibility
+                + " storage_driver=" + validateStorageDriver(storageDriver);
         try (LogSink log = new LogSink(logFile(deContext))) {
             log.line("QUEUED: " + message);
             writeStatus(deContext, "QUEUED " + message);
@@ -209,6 +215,12 @@ final class DockerNetworkProvisioner {
             return policy;
         }
         return BfuPreferences.DOCKER_HOST_ONLY;
+    }
+
+    private static String validateStorageDriver(String value) {
+        return BfuPreferences.DOCKER_STORAGE_VFS.equals(value)
+                ? BfuPreferences.DOCKER_STORAGE_VFS
+                : BfuPreferences.DOCKER_STORAGE_OVERLAY2;
     }
 
     private static void recordFailure(Context deContext, LogSink log, String reason) {

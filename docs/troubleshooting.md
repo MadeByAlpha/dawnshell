@@ -414,6 +414,12 @@ The managed cgroup driver should be `cgroupfs`.
 | `failed to unshare remaining namespaces` | A dangerous namespace creation was blocked. Verify that the wrapper supplied host IPC. |
 | `resolv.conf: operation not permitted` | Container mount setup conflicts with kernel/SELinux policy. Preserve the daemon log instead of retrying repeatedly. |
 | `mount callback failed ... /dev/console: operation not permitted` | Docker selected the containerd image store, whose temporary snapshot initialization is incompatible with some Android `/data` filesystems or security policies. Current DawnShell builds automatically migrate an existing DawnShell-managed policy to the classic image store before the next Debian start. Restart Debian once, then pull the image again if it is not visible. Unmanaged `daemon.json` files are intentionally left for the administrator. |
+| Container creation randomly fails with `operation not permitted` on `/etc/hosts`, `/.dockerenv`, `/dev/console`, or the image entrypoint | Some Android kernels intermittently reject dockerd's writes through a freshly mounted `overlay2` layer. The same image starts fine on the next attempt, which makes it look random. Set **Container storage driver** to **vfs** on the Advanced page and press Apply. |
+
+The `vfs` driver copies each image layer in full instead of stacking them with
+overlayfs, so it avoids the kernel path that fails. Pulls are slower and use far
+more storage. Images and containers created under the other driver stay on disk
+and reappear when you switch back.
 
 If normal **Stop** ends with `supervisor_did_not_release_lock`, use
 **Force-stop stuck supervisor** on the Home page. It does not trust a PID number

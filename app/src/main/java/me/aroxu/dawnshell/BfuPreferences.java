@@ -20,6 +20,8 @@ final class BfuPreferences {
     private static final String KEY_DOCKER_NETWORK_POLICY = "docker_network_policy";
     private static final String KEY_DOCKER_HOST_IPC_COMPATIBILITY =
             "docker_host_ipc_compatibility";
+    private static final String KEY_DOCKER_STORAGE_DRIVER =
+            "docker_storage_driver";
     private static final String KEY_SHARE_HOST_USB_LEGACY = "share_host_usb";
     private static final String KEY_USB_PASSTHROUGH_MODE = "usb_passthrough_mode";
     private static final String KEY_USB_EXCLUSIVE_DEVICE_IDS =
@@ -36,6 +38,9 @@ final class BfuPreferences {
     static final String DOCKER_NATIVE_NFT_BRIDGE = "native_nft";
     static final String DOCKER_IPTABLES_NFT_BRIDGE = "iptables_nft";
     static final String DOCKER_LEGACY_BRIDGE = "legacy";
+
+    static final String DOCKER_STORAGE_OVERLAY2 = "overlay2";
+    static final String DOCKER_STORAGE_VFS = "vfs";
 
     static final String USB_PASSTHROUGH_OFF = "off";
     static final String USB_PASSTHROUGH_DIRECT = "direct";
@@ -83,6 +88,11 @@ final class BfuPreferences {
         return get(context).getBoolean(KEY_DOCKER_HOST_IPC_COMPATIBILITY, true);
     }
 
+    static String dockerStorageDriver(Context context) {
+        return validatedDockerStorageDriver(get(context).getString(
+                KEY_DOCKER_STORAGE_DRIVER, DOCKER_STORAGE_OVERLAY2));
+    }
+
     static String usbPassthroughMode(Context context) {
         SharedPreferences preferences = get(context);
         String stored = preferences.getString(KEY_USB_PASSTHROUGH_MODE, null);
@@ -109,6 +119,7 @@ final class BfuPreferences {
                      String cgroupPolicy, boolean pidNamespaceFallback,
                      String dockerNetworkPolicy,
                      boolean dockerHostIpcCompatibility,
+                     String dockerStorageDriver,
                      String usbPassthroughMode, String usbExclusiveDeviceIds,
                      boolean hardwareCodecBridge) {
         String validatedUsbMode = validatedUsbPassthroughMode(usbPassthroughMode);
@@ -128,6 +139,8 @@ final class BfuPreferences {
                         validatedDockerNetworkPolicy(dockerNetworkPolicy))
                 .putBoolean(KEY_DOCKER_HOST_IPC_COMPATIBILITY,
                         dockerHostIpcCompatibility)
+                .putString(KEY_DOCKER_STORAGE_DRIVER,
+                        validatedDockerStorageDriver(dockerStorageDriver))
                 .putString(KEY_USB_PASSTHROUGH_MODE, validatedUsbMode)
                 .putString(KEY_USB_EXCLUSIVE_DEVICE_IDS, normalizedUsbIds)
                 .putBoolean(KEY_HARDWARE_CODEC_BRIDGE, hardwareCodecBridge)
@@ -148,6 +161,11 @@ final class BfuPreferences {
             return value;
         }
         return DOCKER_HOST_ONLY;
+    }
+
+    private static String validatedDockerStorageDriver(String value) {
+        if (DOCKER_STORAGE_VFS.equals(value)) return DOCKER_STORAGE_VFS;
+        return DOCKER_STORAGE_OVERLAY2;
     }
 
     private static String validatedUsbPassthroughMode(String value) {

@@ -14,15 +14,16 @@ fail() {
     exit "$code"
 }
 
-[ "$#" -eq 5 ] || [ "$#" -eq 6 ] || \
-    fail 2 "usage: configure-docker-network.sh ROOT BFU_ROOT POLICY DEBIAN_ARCH HOST_IPC_COMPATIBILITY [--inside-mount-ns]"
+[ "$#" -eq 6 ] || [ "$#" -eq 7 ] || \
+    fail 2 "usage: configure-docker-network.sh ROOT BFU_ROOT POLICY DEBIAN_ARCH HOST_IPC_COMPATIBILITY STORAGE_DRIVER [--inside-mount-ns]"
 
 REQUESTED_ROOT="$1"
 BFU_ROOT="$2"
 POLICY="$3"
 EXPECTED_ARCH="$4"
 HOST_IPC_COMPATIBILITY="$5"
-MODE="${6-}"
+STORAGE_DRIVER="$6"
+MODE="${7-}"
 BIN="$BFU_ROOT/bin"
 TOOLBOX="$BIN/busybox"
 FDGUARD="$BIN/dawnshell-fdguard"
@@ -47,13 +48,18 @@ case "$HOST_IPC_COMPATIBILITY" in
     true|false) ;;
     *) fail 3 "Docker host IPC compatibility must be true or false" ;;
 esac
+case "$STORAGE_DRIVER" in
+    overlay2|vfs) ;;
+    *) fail 3 "Docker storage driver must be overlay2 or vfs" ;;
+esac
 
 if [ "$MODE" != "--inside-mount-ns" ]; then
     [ -x "$TOOLBOX" ] || fail 10 "source-built DawnShell toolbox is missing"
     echo "Creating private AFU mount namespace for Docker policy"
     exec "$TOOLBOX" unshare --mount --fork \
         /system/bin/sh "$0" "$ROOT" "$BFU_ROOT" "$POLICY" \
-        "$EXPECTED_ARCH" "$HOST_IPC_COMPATIBILITY" --inside-mount-ns
+        "$EXPECTED_ARCH" "$HOST_IPC_COMPATIBILITY" "$STORAGE_DRIVER" \
+        --inside-mount-ns
 fi
 
 umask 022
@@ -139,11 +145,13 @@ DAWNSHELL_DOCKER_HOST_IPC="$HOST_IPC_COMPATIBILITY" container=dawnshell \
     container=dawnshell \
     DAWNSHELL_DOCKER_POLICY="$POLICY" \
     DAWNSHELL_DOCKER_HOST_IPC="$HOST_IPC_COMPATIBILITY" \
+    DAWNSHELL_DOCKER_STORAGE="$STORAGE_DRIVER" \
     /bin/bash -s <<'DEBIAN_POLICY'
 set -Eeuo pipefail
 
 policy="${DAWNSHELL_DOCKER_POLICY:?}"
 host_ipc_compatibility="${DAWNSHELL_DOCKER_HOST_IPC:?}"
+storage_driver="${DAWNSHELL_DOCKER_STORAGE:?}"
 docker_dir=/etc/docker
 daemon_json=$docker_dir/daemon.json
 managed_hash=$docker_dir/.dawnshell-daemon-json.sha256
@@ -472,10 +480,26 @@ esac
 echo "POLICY: disabling Docker's containerd snapshotter for Android /data compatibility"
 echo "WARNING: switching image stores preserves existing data but images and containers from the other store are hidden until it is re-enabled"
 
+# Some Android kernels intermittently fail dockerd's writes through a freshly
+# created overlay2 merged mount with EPERM, which aborts container creation
+# with "operation not permitted" on /etc/hosts, /.dockerenv, or /dev/console.
+# The vfs driver copies each layer into a plain directory and avoids overlay
+# copy-up entirely.
+storage_entry='  "storage-driver": "overlay2",'
+if [ "$storage_driver" = vfs ]; then
+    storage_entry='  "storage-driver": "vfs",'
+    echo "POLICY: using the vfs storage driver for maximum kernel compatibility"
+    echo "WARNING: vfs copies every image layer, so pulls are slower and use far more disk"
+    echo "WARNING: images and containers built under overlay2 remain on disk but stay hidden until overlay2 is selected again"
+else
+    echo "POLICY: using the overlay2 storage driver"
+fi
+
 temporary="$docker_dir/.daemon.json.dawnshell.$$"
 if [ "$backend" = none ]; then
-    cat > "$temporary" <<'EOF_HOST'
+    cat > "$temporary" <<EOF_HOST
 {
+$storage_entry
   "features": {"containerd-snapshotter": false},
   "exec-opts": ["native.cgroupdriver=cgroupfs"],
   "bridge": "none",
@@ -487,8 +511,9 @@ if [ "$backend" = none ]; then
 }
 EOF_HOST
 elif [ "$backend" = native-nft ]; then
-    cat > "$temporary" <<'EOF_NATIVE_NFT'
+    cat > "$temporary" <<EOF_NATIVE_NFT
 {
+$storage_entry
   "features": {"containerd-snapshotter": false},
   "exec-opts": ["native.cgroupdriver=cgroupfs"],
   "firewall-backend": "nftables",
@@ -500,8 +525,9 @@ elif [ "$backend" = native-nft ]; then
 }
 EOF_NATIVE_NFT
 else
-    cat > "$temporary" <<'EOF_BRIDGE'
+    cat > "$temporary" <<EOF_BRIDGE
 {
+$storage_entry
   "features": {"containerd-snapshotter": false},
   "exec-opts": ["native.cgroupdriver=cgroupfs"],
   "iptables": true,
@@ -548,7 +574,7 @@ chmod 0644 "${policy_record}.new"
 mv "${policy_record}.new" "$policy_record"
 sync
 
-echo "DOCKER_POLICY_SUCCEEDED: requested=$policy resolved_backend=$backend cgroup_driver=cgroupfs image_store=classic containerd_snapshotter=false host_ipc_compatibility=$host_ipc_compatibility"
+echo "DOCKER_POLICY_SUCCEEDED: requested=$policy resolved_backend=$backend cgroup_driver=cgroupfs image_store=classic containerd_snapshotter=false host_ipc_compatibility=$host_ipc_compatibility storage_driver=$storage_driver"
 if [ "$backend" = none ]; then
     echo "USAGE: start containers with --network host"
 fi

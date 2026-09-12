@@ -379,12 +379,13 @@ public class BfuBootService extends Service {
         if (!DockerNetworkProvisioner.needsAutomaticMigration(this)) return;
         String policy = BfuPreferences.dockerNetworkPolicy(this);
         boolean hostIpc = BfuPreferences.dockerHostIpcCompatibility(this);
+        String storage = BfuPreferences.dockerStorageDriver(this);
         recordOperation("DOCKER_POLICY_AUTO_MIGRATION_STARTED trigger="
                 + BfuSu.sanitize(trigger)
                 + " cgroup_policy=" + BfuPreferences.cgroupPolicy(this));
-        DockerNetworkProvisioner.recordQueued(this, policy, hostIpc);
+        DockerNetworkProvisioner.recordQueued(this, policy, hostIpc, storage);
         boolean succeeded = DockerNetworkProvisioner.apply(
-                this, layout, policy, hostIpc);
+                this, layout, policy, hostIpc, storage);
         recordOperation("DOCKER_POLICY_AUTO_MIGRATION_"
                 + (succeeded ? "SUCCEEDED" : "FAILED")
                 + " trigger=" + BfuSu.sanitize(trigger));
@@ -573,9 +574,11 @@ public class BfuBootService extends Service {
                         String policy = BfuPreferences.dockerNetworkPolicy(this);
                         boolean hostIpc =
                                 BfuPreferences.dockerHostIpcCompatibility(this);
-                        DockerNetworkProvisioner.recordQueued(this, policy, hostIpc);
+                        String storage = BfuPreferences.dockerStorageDriver(this);
+                        DockerNetworkProvisioner.recordQueued(this, policy, hostIpc,
+                                storage);
                         dockerSucceeded = DockerNetworkProvisioner.apply(
-                                this, layout, policy, hostIpc);
+                                this, layout, policy, hostIpc, storage);
                     }
                     recordOperation("RUNTIME_SETTINGS_APPLIED usb_requested="
                             + applyUsb + " usb_succeeded=" + usbSucceeded

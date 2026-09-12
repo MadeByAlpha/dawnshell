@@ -509,6 +509,11 @@ docker run --rm --network host hello-world
 | `failed to unshare remaining namespaces` | 위험한 namespace 생성이 DawnShell 안전 정책 또는 커널에서 차단됐습니다. wrapper가 `--ipc=host`를 적용하는지 확인합니다. |
 | `/etc/resolv.conf: operation not permitted` | container mount callback과 커널/SELinux가 충돌했습니다. daemon 로그와 사용한 compose 설정을 수집하고 반복 재시작하지 않습니다. |
 | `mount callback failed ... /dev/console: operation not permitted` | Docker가 containerd image store를 선택했으며, 임시 snapshot 초기화가 일부 Android `/data` 파일시스템 또는 보안 정책과 호환되지 않습니다. 현재 DawnShell은 이전에 DawnShell이 관리하던 정책을 다음 Debian 시작 전에 classic image store로 자동 마이그레이션합니다. Debian을 한 번 재시작한 뒤 이미지가 보이지 않으면 다시 pull합니다. 사용자가 직접 관리하는 `daemon.json`은 의도적으로 변경하지 않습니다. |
+| 컨테이너 생성이 `/etc/hosts`, `/.dockerenv`, `/dev/console` 또는 이미지 엔트리포인트에서 `operation not permitted`로 무작위 실패 | 일부 Android 커널은 갓 마운트된 `overlay2` 레이어에 dockerd가 쓰는 것을 간헐적으로 거부합니다. 같은 이미지가 다음 시도에서는 정상 실행돼 무작위처럼 보입니다. 고급 페이지에서 **컨테이너 저장 방식**을 **vfs**로 바꾸고 적용을 누르세요. |
+
+`vfs`는 이미지 레이어를 overlayfs로 쌓지 않고 통째로 복사하므로 실패하는 커널
+경로를 피합니다. 대신 내려받기가 느리고 저장 공간을 훨씬 많이 씁니다. 다른
+드라이버로 만든 이미지와 컨테이너는 디스크에 남아 있다가 되돌리면 다시 보입니다.
 
 일반 **중지**가 `supervisor_did_not_release_lock`으로 끝나면 홈 화면의
 **멈춘 감독 프로세스 강제 종료**를 사용할 수 있습니다. 이 기능은 저장된 PID
