@@ -115,6 +115,12 @@ grep -Fq 'android:id="@+id/dashboard_navigation"' "$layout"
 grep -Fq 'requestRuntimeSettingsApply(this' "$boot_activity"
 grep -Fq 'ACTION_APPLY_RUNTIME_SETTINGS' "$boot_service"
 grep -Fq 'RUNTIME_SETTINGS_APPLIED' "$boot_service"
+grep -Fq 'applyAutomaticDockerMigration(layout, trigger)' "$boot_service"
+grep -Fq 'needsAutomaticMigration(this)' "$boot_service"
+grep -Fq 'MANAGED_CONFIGURATION_REVISION = 2' \
+    "$repo_dir/app/src/main/java/me/aroxu/dawnshell/DockerNetworkProvisioner.java"
+grep -Fq 'writeManagedRevision(deContext, MANAGED_CONFIGURATION_REVISION)' \
+    "$repo_dir/app/src/main/java/me/aroxu/dawnshell/DockerNetworkProvisioner.java"
 if grep -Fq 'android:id="@+id/apply_host_usb_policy_button"' "$layout" \
         || grep -Fq 'android:id="@+id/apply_docker_policy_button"' "$layout"; then
     echo "USB and Docker must use the single global settings apply action" >&2

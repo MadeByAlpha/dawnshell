@@ -368,6 +368,22 @@ public class BfuBootService extends Service {
         }
     }
 
+    private void applyAutomaticDockerMigration(BfuRuntime.Layout layout,
+                                               String trigger) {
+        if (!DockerNetworkProvisioner.needsAutomaticMigration(this)) return;
+        String policy = BfuPreferences.dockerNetworkPolicy(this);
+        boolean hostIpc = BfuPreferences.dockerHostIpcCompatibility(this);
+        recordOperation("DOCKER_POLICY_AUTO_MIGRATION_STARTED trigger="
+                + BfuSu.sanitize(trigger)
+                + " cgroup_policy=" + BfuPreferences.cgroupPolicy(this));
+        DockerNetworkProvisioner.recordQueued(this, policy, hostIpc);
+        boolean succeeded = DockerNetworkProvisioner.apply(
+                this, layout, policy, hostIpc);
+        recordOperation("DOCKER_POLICY_AUTO_MIGRATION_"
+                + (succeeded ? "SUCCEEDED" : "FAILED")
+                + " trigger=" + BfuSu.sanitize(trigger));
+    }
+
     private void runDebianRootfsInstall() {
         try {
             BfuRuntime.Layout layout = BfuRuntime.provision(this);
@@ -479,7 +495,20 @@ public class BfuBootService extends Service {
                 BfuRuntime.Layout layout = null;
                 try {
                     layout = BfuRuntime.provision(this);
+                    if (operation == DebianLauncher.Operation.START
+                            && !DebianLauncher.isRunning(layout)) {
+                        // Auto mode negotiates cgroup v2 first in the native
+                        // launcher. Apply independently versioned Docker-on-
+                        // Android migrations before PID 1 starts. This path
+                        // works in BFU because every input is in DE storage.
+                        applyAutomaticDockerMigration(layout, trigger);
+                    }
                     runDebianLifecycleNow(layout, operation, trigger);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    Log.w(TAG, "Debian lifecycle preparation interrupted", e);
+                    DebianLauncher.recordFailure(this, layout, operation,
+                            "interrupted while checking managed migrations");
                 } catch (IOException | IllegalStateException e) {
                     Log.e(TAG, "Could not provision Debian lifecycle runtime", e);
                     DebianLauncher.recordFailure(this, layout, operation,

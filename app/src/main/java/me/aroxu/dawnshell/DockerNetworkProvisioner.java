@@ -18,12 +18,16 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
 
-/** AFU-only, explicit Docker network compatibility policy operation. */
+/** Root-backed Docker compatibility policy operation. */
 final class DockerNetworkProvisioner {
 
     private static final String TAG = "DawnShell";
     private static final String LOG_FILE = "docker-network-policy.log";
     private static final String STATUS_FILE = "docker-network-policy.status";
+    private static final String REVISION_FILE = "docker-network-policy.revision";
+    // Increment whenever an already-managed rootfs must receive a new
+    // compatibility setting without requiring the user to toggle a setting.
+    private static final int MANAGED_CONFIGURATION_REVISION = 2;
     private static final int MAX_TAIL_BYTES = 48 * 1024;
     private static final Object FILE_LOCK = new Object();
 
@@ -82,6 +86,7 @@ final class DockerNetworkProvisioner {
             }
 
             log.line("Docker network policy completed successfully");
+            writeManagedRevision(deContext, MANAGED_CONFIGURATION_REVISION);
             writeStatus(deContext, "SUCCEEDED "
                     + (resolvedOutcome == null
                     ? "requested=" + validated : resolvedOutcome));
@@ -148,6 +153,31 @@ final class DockerNetworkProvisioner {
         }
     }
 
+    /**
+     * Returns true only for rootfs installations whose Docker policy was
+     * successfully managed by an older DawnShell build. Fresh installations
+     * and deliberately unmanaged daemon.json files are left untouched.
+     */
+    static boolean needsAutomaticMigration(Context context) {
+        Context deContext = BfuPreferences.deviceProtectedContext(context);
+        try {
+            int revision = readManagedRevision(deContext);
+            if (revision > 0) {
+                return revision < MANAGED_CONFIGURATION_REVISION;
+            }
+            String status = readStatus(context);
+            if (!status.contains(" SUCCEEDED ")) return false;
+            // Successful policy state from builds predating revision files.
+            // Persist the baseline before attempting the migration so a
+            // failed/interrupted attempt is retried on the next safe start.
+            writeManagedRevision(deContext, 1);
+            return MANAGED_CONFIGURATION_REVISION > 1;
+        } catch (IOException e) {
+            Log.w(TAG, "Could not inspect Docker managed configuration revision", e);
+            return false;
+        }
+    }
+
     static String readLogTail(Context context) throws IOException {
         Context deContext = BfuPreferences.deviceProtectedContext(context);
         File file = logFile(deContext);
@@ -206,6 +236,48 @@ final class DockerNetworkProvisioner {
             }
             if (!temporary.renameTo(destination)) {
                 throw new IOException("cannot publish Docker policy status");
+            }
+            setOwnerOnly(destination);
+        }
+    }
+
+    private static int readManagedRevision(Context deContext) throws IOException {
+        File file = new File(deContext.getFilesDir(), REVISION_FILE);
+        if (!file.isFile()) return 0;
+        try (FileInputStream input = new FileInputStream(file);
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[32];
+            int count;
+            while (output.size() < 32 && (count = input.read(buffer, 0,
+                    Math.min(buffer.length, 32 - output.size()))) >= 0) {
+                output.write(buffer, 0, count);
+            }
+            try {
+                return Integer.parseInt(new String(output.toByteArray(),
+                        StandardCharsets.US_ASCII).trim());
+            } catch (NumberFormatException e) {
+                return 0;
+            }
+        }
+    }
+
+    private static void writeManagedRevision(Context deContext, int revision)
+            throws IOException {
+        File destination = new File(deContext.getFilesDir(), REVISION_FILE);
+        File temporary = new File(deContext.getFilesDir(), REVISION_FILE + ".new");
+        byte[] contents = (Integer.toString(revision) + "\n")
+                .getBytes(StandardCharsets.US_ASCII);
+        synchronized (FILE_LOCK) {
+            try (FileOutputStream output = new FileOutputStream(temporary, false)) {
+                output.write(contents);
+                output.getFD().sync();
+            }
+            setOwnerOnly(temporary);
+            if (destination.exists() && !destination.delete()) {
+                throw new IOException("cannot replace Docker policy revision");
+            }
+            if (!temporary.renameTo(destination)) {
+                throw new IOException("cannot publish Docker policy revision");
             }
             setOwnerOnly(destination);
         }
