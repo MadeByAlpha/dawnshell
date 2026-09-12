@@ -75,6 +75,14 @@ assert_arguments run --ipc=host --group-add 3003 --group-add video alpine true
 run_wrapper info
 assert_arguments info
 
+# Turning off host IPC must not cost the container its Android network group,
+# otherwise a non-root service silently loses the ability to answer requests.
+printf 'dawnshell_host_ipc=false\n' > "$temporary_dir/wrapper.conf"
+export DAWNSHELL_WRAPPER_CONF="$temporary_dir/wrapper.conf"
+run_wrapper run --rm hello-world
+assert_arguments run --group-add 3003 --rm hello-world
+unset DAWNSHELL_WRAPPER_CONF
+
 # Compose declares IPC in YAML, so the wrapper must inject an override file
 # instead of a flag. The base project stays first so the override applies last.
 compose_project="$temporary_dir/project"

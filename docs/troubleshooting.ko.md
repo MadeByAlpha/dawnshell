@@ -515,6 +515,19 @@ docker run --rm --network host hello-world
 경로를 피합니다. 대신 내려받기가 느리고 저장 공간을 훨씬 많이 씁니다. 다른
 드라이버로 만든 이미지와 컨테이너는 디스크에 남아 있다가 되돌리면 다시 보입니다.
 
+### `mounting "mqueue" ... no such device`
+
+커널에 POSIX 메시지 큐 파일시스템이 없어서, 자체 IPC 네임스페이스를 쓰는 컨테이너가
+`/dev/mqueue`를 만들지 못하는 경우입니다. `grep -w mqueue /proc/filesystems`로
+확인하세요. 결과가 없으면 커널에 지원이 없는 것입니다. 파일시스템은 있는데 마운트가
+충돌할 때 나오는 `device or resource busy`와는 다른 원인입니다.
+
+컨테이너가 호스트 IPC를 쓰면 Docker가 이 마운트를 아예 생략하므로, **Docker 호스트
+IPC 호환**을 켠 상태로 정책을 다시 적용하면 해결됩니다. `command -v docker`가
+`/usr/local/bin/docker`로 나오는지 확인하세요. `/usr/bin/docker`를 직접 부르면
+관리형 래퍼를 건너뜁니다. 일회성으로는 `--ipc=host`를, Compose에서는 서비스마다
+`ipc: host`를 넣으면 됩니다.
+
 ### 컨테이너 포트가 연결은 받는데 응답이 없음
 
 Android는 프로세스의 UID가 `AID_INET` 그룹(GID 3003)에 속할 때만 네트워크 송신을

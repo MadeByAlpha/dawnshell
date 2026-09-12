@@ -421,6 +421,20 @@ overlayfs, so it avoids the kernel path that fails. Pulls are slower and use far
 more storage. Images and containers created under the other driver stay on disk
 and reappear when you switch back.
 
+### `mounting "mqueue" ... no such device`
+
+The kernel has no POSIX message queue filesystem, so a container with a private
+IPC namespace cannot create `/dev/mqueue`. Confirm it with
+`grep -w mqueue /proc/filesystems`; an empty result means the support is
+missing. This is distinct from `device or resource busy`, which means the
+filesystem exists but the mount conflicts.
+
+Docker omits that mount entirely when the container uses host IPC, so keeping
+**Docker host IPC compatibility** enabled and reapplying the policy is the fix.
+Verify that `command -v docker` resolves to `/usr/local/bin/docker`; calling
+`/usr/bin/docker` directly bypasses the managed wrapper. For a one-off run add
+`--ipc=host`, or `ipc: host` per service in Compose.
+
 ### A container port accepts connections but never answers
 
 Android only lets a process reach the network when its UID belongs to the

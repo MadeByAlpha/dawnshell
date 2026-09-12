@@ -158,6 +158,7 @@ managed_hash=$docker_dir/.dawnshell-daemon-json.sha256
 policy_record=/etc/dawnshell/docker-network-policy
 docker_wrapper=/usr/local/bin/docker
 docker_wrapper_hash=/etc/dawnshell/docker-wrapper.sha256
+docker_wrapper_conf=/etc/dawnshell/docker-wrapper.conf
 
 source /etc/os-release
 [ "${VERSION_CODENAME:-}" = trixie ] || {
@@ -168,6 +169,14 @@ if command -v dockerd >/dev/null 2>&1; then
     echo "PROBE: dockerd is installed"
 else
     echo "WARNING: dockerd is not installed yet; policy will apply on future installation"
+fi
+if grep -qw mqueue /proc/filesystems; then
+    mqueue_supported=true
+    echo "PROBE: kernel provides the mqueue filesystem"
+else
+    mqueue_supported=false
+    echo "WARNING: kernel has no mqueue filesystem; a container with a private IPC namespace fails with 'mounting \"mqueue\" ... no such device'"
+    echo "WARNING: keep Docker host IPC compatibility enabled on this kernel so the wrapper skips that mount"
 fi
 command -v sha256sum >/dev/null 2>&1 || {
     echo "ERROR: sha256sum is missing"
@@ -209,17 +218,25 @@ verify_managed_wrapper() {
 
 configure_host_ipc_wrapper() {
     verify_managed_wrapper
-    if [ "$host_ipc_compatibility" = false ]; then
-        rm -f "$docker_wrapper" "$docker_wrapper_hash"
-        echo "POLICY: Docker host IPC compatibility wrapper disabled"
-        return
-    fi
-
-    install -d -m 0755 -o root -g root /usr/local/bin
+    install -d -m 0755 -o root -g root /usr/local/bin /etc/dawnshell
+    # The wrapper body stays byte-identical whatever the switches are, so the
+    # managed hash does not churn when one is toggled. The runtime decision is
+    # read from this companion file instead. The Android network group is
+    # always injected because without it a container that drops to a non-root
+    # user can accept connections but never transmit a reply.
+    printf 'dawnshell_host_ipc=%s\n' "$host_ipc_compatibility" > "$docker_wrapper_conf"
+    chown 0:0 "$docker_wrapper_conf"
+    chmod 0644 "$docker_wrapper_conf"
     wrapper_temporary="${docker_wrapper}.dawnshell.$$"
     cat > "$wrapper_temporary" <<'EOF_DOCKER_WRAPPER'
 #!/bin/bash
 set -e
+
+dawnshell_host_ipc=true
+dawnshell_wrapper_conf="${DAWNSHELL_WRAPPER_CONF:-/etc/dawnshell/docker-wrapper.conf}"
+if [ -r "$dawnshell_wrapper_conf" ]; then
+    . "$dawnshell_wrapper_conf"
+fi
 
 real_docker=/usr/bin/docker
 [ -x "$real_docker" ] || {
@@ -309,7 +326,11 @@ if (( ${#arguments[@]} > 0 )); then
                             if printf '%s\n' "$declared" | grep -Fxq "$service"; then
                                 continue
                             fi
-                            printf '  %s:\n    ipc: host\n    group_add:\n      - "3003"\n' "$service"
+                            if [ "$dawnshell_host_ipc" = true ]; then
+                                printf '  %s:\n    ipc: host\n    group_add:\n      - "3003"\n' "$service"
+                            else
+                                printf '  %s:\n    group_add:\n      - "3003"\n' "$service"
+                            fi
                         done <<< "$services"
                     } > "$override"
                     # Compose keeps its own project discovery, so only the
@@ -339,7 +360,9 @@ if (( command_index >= 0 )); then
         previous="$argument"
     done
     injected=()
-    [ "$explicit_ipc" = true ] || injected+=(--ipc=host)
+    if [ "$dawnshell_host_ipc" = true ] && [ "$explicit_ipc" = false ]; then
+        injected+=(--ipc=host)
+    fi
     # Android blocks outbound traffic from UIDs without AID_INET (GID 3003).
     # Images that drop privileges to a non-root user therefore accept the
     # connection but never transmit a reply. The supplementary group restores
@@ -362,8 +385,13 @@ EOF_DOCKER_WRAPPER
     printf '%s\n' "$new_wrapper_hash" > "$docker_wrapper_hash"
     chown 0:0 "$docker_wrapper_hash"
     chmod 0600 "$docker_wrapper_hash"
-    echo "POLICY: Docker run/create wrapper enables --ipc=host and --group-add 3003 (Android AID_INET) by default"
-    echo "WARNING: containers share Android/Debian host IPC; use /usr/bin/docker to bypass"
+    if [ "$host_ipc_compatibility" = true ]; then
+        echo "POLICY: Docker run/create wrapper adds --ipc=host and --group-add 3003 (Android AID_INET)"
+        echo "WARNING: containers share Android/Debian host IPC; use /usr/bin/docker to bypass"
+    else
+        echo "POLICY: Docker run/create wrapper adds --group-add 3003 (Android AID_INET) only"
+        echo "WARNING: without host IPC a container that creates its own IPC namespace can panic or fail to start on affected kernels"
+    fi
 }
 
 probe_iptables_check() {
@@ -579,7 +607,8 @@ cgroup_driver=cgroupfs
 image_store=classic
 containerd_snapshotter=false
 host_ipc_compatibility=$host_ipc_compatibility
-docker_cli_wrapper=$([ "$host_ipc_compatibility" = true ] && echo /usr/local/bin/docker || echo none)
+docker_cli_wrapper=/usr/local/bin/docker
+mqueue_filesystem=$mqueue_supported
 bridge_mutates_android_global_netfilter=$([ "$backend" = none ] && echo false || echo true)
 configured_epoch=$(date +%s)
 EOF_RECORD
@@ -588,7 +617,7 @@ chmod 0644 "${policy_record}.new"
 mv "${policy_record}.new" "$policy_record"
 sync
 
-echo "DOCKER_POLICY_SUCCEEDED: requested=$policy resolved_backend=$backend cgroup_driver=cgroupfs image_store=classic containerd_snapshotter=false host_ipc_compatibility=$host_ipc_compatibility storage_driver=$storage_driver"
+echo "DOCKER_POLICY_SUCCEEDED: requested=$policy resolved_backend=$backend cgroup_driver=cgroupfs image_store=classic containerd_snapshotter=false host_ipc_compatibility=$host_ipc_compatibility storage_driver=$storage_driver mqueue_filesystem=$mqueue_supported"
 if [ "$backend" = none ]; then
     echo "USAGE: start containers with --network host"
 fi

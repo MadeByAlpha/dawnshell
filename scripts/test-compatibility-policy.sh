@@ -67,6 +67,17 @@ grep -Fq 'injected+=(--ipc=host)' "$policy_script"
 # Android drops outbound traffic from container UIDs without AID_INET.
 grep -Fq 'injected+=(--group-add 3003)' "$policy_script"
 grep -Fq 'group_add:' "$policy_script"
+# A kernel without POSIX message queues must be reported, not silently hit at
+# container creation as "mounting mqueue ... no such device".
+grep -Fq 'grep -qw mqueue /proc/filesystems' "$policy_script"
+grep -Fq 'mqueue_filesystem=' "$policy_script"
+# The wrapper carries the Android network group, so it must survive the host
+# IPC switch being turned off.
+grep -Fq 'dawnshell_wrapper_conf' "$policy_script"
+if grep -Fq 'Docker host IPC compatibility wrapper disabled' "$policy_script"; then
+    echo "the managed wrapper must stay installed when host IPC is disabled" >&2
+    exit 1
+fi
 # Host IPC must be the default rather than an opt-in switch.
 grep -Fq 'KEY_DOCKER_HOST_IPC_COMPATIBILITY, true' \
     "$repo_dir/app/src/main/java/me/aroxu/dawnshell/BfuPreferences.java"
