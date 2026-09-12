@@ -112,6 +112,10 @@
     <string name="bfu_stop_confirm_title">Stop BFU Debian?</string>
     <string name="bfu_stop_confirm_message">This explicitly asks the Debian container service manager to exit gracefully and stops SSH. Unlock events do not perform this action.</string>
     <string name="bfu_stop_confirm_button">Stop Debian</string>
+    <string name="bfu_force_stop_debian_short">Force-stop stuck supervisor</string>
+    <string name="bfu_force_stop_confirm_title">Force-stop Debian?</string>
+    <string name="bfu_force_stop_confirm_message">Use this only after normal Stop fails with supervisor_did_not_release_lock. DawnShell revalidates the recorded supervisor and Debian init identities, then sends SIGKILL and waits for the kernel to release the process lock. Unsaved work is lost. It never deletes the lock file or kills an unverified PID. A process stuck in uninterruptible kernel sleep may still require an Android reboot.</string>
+    <string name="bfu_force_stop_confirm_button">Force stop</string>
     <string name="bfu_restart_confirm_title">Restart BFU Debian?</string>
     <string name="bfu_restart_confirm_message">This gracefully exits the verified Debian PID 1, starts a fresh isolated instance, then waits for D-Bus, SSH, and TCP 22 health checks. USER_UNLOCKED never performs this action.</string>
     <string name="bfu_restart_confirm_button">Restart Debian</string>

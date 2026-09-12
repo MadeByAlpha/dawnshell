@@ -344,6 +344,8 @@ public class BootActivity extends AppCompatActivity {
                 requestLifecycle(DebianLauncher.Operation.STATUS));
         findViewById(R.id.stop_debian_button)
                 .setOnClickListener(view -> confirmStopDebian());
+        findViewById(R.id.force_stop_debian_button)
+                .setOnClickListener(view -> confirmForceStopDebian());
         findViewById(R.id.export_private_key_button)
                 .setOnClickListener(view -> confirmPrivateKeyFileExport());
         findViewById(R.id.copy_key_import_button)
@@ -1938,6 +1940,17 @@ public class BootActivity extends AppCompatActivity {
                 .setPositiveButton(R.string.bfu_stop_confirm_button,
                         (dialog, which) -> requestLifecycle(
                                 DebianLauncher.Operation.STOP))
+                .show();
+    }
+
+    private void confirmForceStopDebian() {
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.bfu_force_stop_confirm_title)
+                .setMessage(R.string.bfu_force_stop_confirm_message)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.bfu_force_stop_confirm_button,
+                        (dialog, which) -> requestLifecycle(
+                                DebianLauncher.Operation.FORCE_STOP))
                 .show();
     }
 

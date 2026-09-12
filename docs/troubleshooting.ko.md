@@ -510,6 +510,13 @@ docker run --rm --network host hello-world
 | `/etc/resolv.conf: operation not permitted` | container mount callback과 커널/SELinux가 충돌했습니다. daemon 로그와 사용한 compose 설정을 수집하고 반복 재시작하지 않습니다. |
 | `mount callback failed ... /dev/console: operation not permitted` | Docker가 containerd image store를 선택했으며, 임시 snapshot 초기화가 일부 Android `/data` 파일시스템 또는 보안 정책과 호환되지 않습니다. 현재 DawnShell은 이전에 DawnShell이 관리하던 정책을 다음 Debian 시작 전에 classic image store로 자동 마이그레이션합니다. Debian을 한 번 재시작한 뒤 이미지가 보이지 않으면 다시 pull합니다. 사용자가 직접 관리하는 `daemon.json`은 의도적으로 변경하지 않습니다. |
 
+일반 **중지**가 `supervisor_did_not_release_lock`으로 끝나면 홈 화면의
+**멈춘 감독 프로세스 강제 종료**를 사용할 수 있습니다. 이 기능은 저장된 PID
+숫자만 믿지 않고 프로세스 시작 시각과 실행 파일 inode를 다시 확인한 뒤 Debian
+init과 supervisor에만 `SIGKILL`을 보냅니다. lock 파일 자체는 삭제하지 않습니다.
+강제 종료 후에도 커널이 lock을 반환하지 않으면 해당 프로세스가 중단 불가능한
+커널 대기 상태일 수 있으므로 Android를 재부팅해야 합니다.
+
 DawnShell은 관리형 Docker 설정에
 `features.containerd-snapshotter=false`를 명시합니다. 두 image store의 데이터는
 삭제되지 않지만 활성화된 store의 이미지와 컨테이너만 보입니다. store를 전환해도

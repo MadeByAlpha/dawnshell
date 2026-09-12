@@ -21,7 +21,7 @@ import java.util.TimeZone;
 /** Root-backed lifecycle control for the long-running Debian systemd namespace. */
 final class DebianLauncher {
 
-    enum Operation { START, RESTART, STATUS, STOP }
+    enum Operation { START, RESTART, STATUS, STOP, FORCE_STOP }
 
     private static final String TAG = "DawnShell";
     private static final String STATUS_FILE = "debian-lifecycle.status";
@@ -79,6 +79,8 @@ final class DebianLauncher {
             timeoutMs = 70_000L;
         } else if (operation == Operation.STOP) {
             timeoutMs = 35_000L;
+        } else if (operation == Operation.FORCE_STOP) {
+            timeoutMs = 15_000L;
         } else {
             timeoutMs = 12_000L;
         }
@@ -125,7 +127,7 @@ final class DebianLauncher {
     private static String lifecycleCommand(Context context, BfuRuntime.Layout layout,
                                            Operation operation) {
         String command = BfuSu.shellQuote(layout.namespaceProbeBinary.getAbsolutePath())
-                + " " + operation.name().toLowerCase(Locale.US)
+                + " " + operation.name().toLowerCase(Locale.US).replace('_', '-')
                 + " " + BfuSu.shellQuote(BfuRootfsProbe.ROOTFS_PATH)
                 + " " + BfuSu.shellQuote(layout.run.getAbsolutePath());
         if (operation == Operation.START || operation == Operation.RESTART) {

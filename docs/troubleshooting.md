@@ -415,6 +415,13 @@ The managed cgroup driver should be `cgroupfs`.
 | `resolv.conf: operation not permitted` | Container mount setup conflicts with kernel/SELinux policy. Preserve the daemon log instead of retrying repeatedly. |
 | `mount callback failed ... /dev/console: operation not permitted` | Docker selected the containerd image store, whose temporary snapshot initialization is incompatible with some Android `/data` filesystems or security policies. Current DawnShell builds automatically migrate an existing DawnShell-managed policy to the classic image store before the next Debian start. Restart Debian once, then pull the image again if it is not visible. Unmanaged `daemon.json` files are intentionally left for the administrator. |
 
+If normal **Stop** ends with `supervisor_did_not_release_lock`, use
+**Force-stop stuck supervisor** on the Home page. It does not trust a PID number
+alone: it revalidates the process start time and executable inode before sending
+`SIGKILL` only to the recorded Debian init and supervisor. It never deletes the
+lock file. If the kernel still does not release the lock, the process may be in
+uninterruptible kernel sleep and Android must be rebooted.
+
 DawnShell explicitly sets `features.containerd-snapshotter=false` in its managed
 Docker configuration. Docker preserves data belonging to both image stores, but
 only the active store's images and containers are visible. Switching stores

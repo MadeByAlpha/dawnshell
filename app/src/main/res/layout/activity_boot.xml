@@ -295,6 +295,16 @@
                     </LinearLayout>
 
                     <com.google.android.material.button.MaterialButton
+                        android:id="@+id/force_stop_debian_button"
+                        style="@style/Widget.DawnShell.Button.Outlined"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/bfu_force_stop_debian_short"
+                        android:textColor="?attr/colorError"
+                        app:strokeColor="?attr/colorError" />
+
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/open_runtime_log_button"
                         style="@style/Widget.DawnShell.Button.Outlined"
                         android:layout_width="match_parent"

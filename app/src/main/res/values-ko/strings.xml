@@ -112,6 +112,10 @@
     <string name="bfu_stop_confirm_title">BFU Debian을 중지할까요?</string>
     <string name="bfu_stop_confirm_message">Debian 컨테이너 서비스 관리자가 정상 종료하도록 명시적으로 요청하고 SSH를 중지합니다. 잠금 해제 이벤트에서는 이 작업을 실행하지 않습니다.</string>
     <string name="bfu_stop_confirm_button">Debian 중지</string>
+    <string name="bfu_force_stop_debian_short">멈춘 감독 프로세스 강제 종료</string>
+    <string name="bfu_force_stop_confirm_title">Debian을 강제로 종료할까요?</string>
+    <string name="bfu_force_stop_confirm_message">일반 중지가 supervisor_did_not_release_lock 오류로 실패한 경우에만 사용하세요. DawnShell은 기록된 감독 프로세스와 Debian init의 PID, 시작 시각, 실행 파일 신원을 다시 검증한 후 SIGKILL을 보내고 커널이 프로세스 lock을 실제로 반환할 때까지 기다립니다. 저장하지 않은 작업은 사라집니다. lock 파일을 삭제하거나 검증되지 않은 PID를 종료하지 않습니다. 프로세스가 커널의 중단 불가능 절전 상태에 멈춘 경우에는 Android 재부팅이 필요할 수 있습니다.</string>
+    <string name="bfu_force_stop_confirm_button">강제 종료</string>
     <string name="bfu_restart_confirm_title">BFU Debian을 재시작할까요?</string>
     <string name="bfu_restart_confirm_message">검증된 Debian PID 1을 정상 종료하고 새 격리 인스턴스를 시작한 다음 D-Bus, SSH 및 TCP 22 상태 검사를 기다립니다. USER_UNLOCKED는 이 작업을 실행하지 않습니다.</string>
     <string name="bfu_restart_confirm_button">Debian 재시작</string>

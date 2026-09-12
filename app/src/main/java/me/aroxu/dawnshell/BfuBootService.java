@@ -38,6 +38,8 @@ public class BfuBootService extends Service {
             "me.aroxu.dawnshell.action.STATUS_DEBIAN_SYSTEMD";
     static final String ACTION_DEBIAN_STOP =
             "me.aroxu.dawnshell.action.STOP_DEBIAN_SYSTEMD";
+    static final String ACTION_DEBIAN_FORCE_STOP =
+            "me.aroxu.dawnshell.action.FORCE_STOP_DEBIAN_SYSTEMD";
     static final String ACTION_REMOVE_DEBIAN_ROOTFS =
             "me.aroxu.dawnshell.action.REMOVE_DEBIAN_ROOTFS";
     static final String ACTION_APPLY_RUNTIME_SETTINGS =
@@ -97,6 +99,7 @@ public class BfuBootService extends Service {
         String action = intent == null ? ACTION_START : intent.getAction();
         boolean disabledControlAllowed = ACTION_DEBIAN_STATUS.equals(action)
                 || ACTION_DEBIAN_STOP.equals(action)
+                || ACTION_DEBIAN_FORCE_STOP.equals(action)
                 || ACTION_REMOVE_DEBIAN_ROOTFS.equals(action)
                 || ACTION_APPLY_RUNTIME_SETTINGS.equals(action)
                 // The codec bridge is independent of BFU Debian, so it must
@@ -268,6 +271,9 @@ public class BfuBootService extends Service {
                 break;
             case STOP:
                 action = ACTION_DEBIAN_STOP;
+                break;
+            case FORCE_STOP:
+                action = ACTION_DEBIAN_FORCE_STOP;
                 break;
             default:
                 throw new IllegalArgumentException("Unsupported lifecycle operation");
@@ -454,6 +460,7 @@ public class BfuBootService extends Service {
     private void requestLifecycleOperation(DebianLauncher.Operation operation,
                                            String trigger) {
         boolean urgent = operation == DebianLauncher.Operation.STOP
+                || operation == DebianLauncher.Operation.FORCE_STOP
                 || operation == DebianLauncher.Operation.RESTART;
         if (operation == DebianLauncher.Operation.RESTART
                 && managementOperationRunning()) {
@@ -474,7 +481,9 @@ public class BfuBootService extends Service {
                 }
                 if (activeLifecycleOperation != null
                         && (activeLifecycleOperation == operation
-                        || activeLifecycleOperation == DebianLauncher.Operation.STOP)) {
+                        || activeLifecycleOperation == DebianLauncher.Operation.STOP
+                        || activeLifecycleOperation
+                        == DebianLauncher.Operation.FORCE_STOP)) {
                     recordOperation("DEBIAN_LIFECYCLE_REJECTED operation="
                             + operation.name().toLowerCase(java.util.Locale.US)
                             + " reason="
@@ -626,6 +635,9 @@ public class BfuBootService extends Service {
         if (ACTION_DEBIAN_RESTART.equals(action)) return DebianLauncher.Operation.RESTART;
         if (ACTION_DEBIAN_STATUS.equals(action)) return DebianLauncher.Operation.STATUS;
         if (ACTION_DEBIAN_STOP.equals(action)) return DebianLauncher.Operation.STOP;
+        if (ACTION_DEBIAN_FORCE_STOP.equals(action)) {
+            return DebianLauncher.Operation.FORCE_STOP;
+        }
         return null;
     }
 
