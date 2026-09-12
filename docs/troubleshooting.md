@@ -413,6 +413,13 @@ The managed cgroup driver should be `cgroupfs`.
 | `/dev/mqueue ... device or resource busy` | The kernel's private IPC path is incompatible. Enable the host-IPC wrapper and reapply policy. |
 | `failed to unshare remaining namespaces` | A dangerous namespace creation was blocked. Verify that the wrapper supplied host IPC. |
 | `resolv.conf: operation not permitted` | Container mount setup conflicts with kernel/SELinux policy. Preserve the daemon log instead of retrying repeatedly. |
+| `mount callback failed ... /dev/console: operation not permitted` | Docker selected the containerd image store, whose temporary snapshot initialization is incompatible with some Android `/data` filesystems or security policies. Reapply DawnShell's Docker settings to select the classic image store, restart Docker, and pull the image again if it is not visible. |
+
+DawnShell explicitly sets `features.containerd-snapshotter=false` in its managed
+Docker configuration. Docker preserves data belonging to both image stores, but
+only the active store's images and containers are visible. Switching stores
+does not migrate or delete that data. See Docker's
+[containerd image store documentation](https://docs.docker.com/engine/storage/containerd/).
 
 Bridge modes can alter Android-global firewall, NAT, forwarding, and routes. If
 connectivity breaks, use the local screen or ADB to reapply host-only mode.

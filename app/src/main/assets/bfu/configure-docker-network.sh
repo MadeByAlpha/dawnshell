@@ -469,11 +469,14 @@ case "$backend" in
 esac
 [ "$backend" = none ] || \
     echo "WARNING: bridge mode can mutate Android-global firewall, NAT, routes, and forwarding"
+echo "POLICY: disabling Docker's containerd snapshotter for Android /data compatibility"
+echo "WARNING: switching image stores preserves existing data but images and containers from the other store are hidden until it is re-enabled"
 
 temporary="$docker_dir/.daemon.json.dawnshell.$$"
 if [ "$backend" = none ]; then
     cat > "$temporary" <<'EOF_HOST'
 {
+  "features": {"containerd-snapshotter": false},
   "exec-opts": ["native.cgroupdriver=cgroupfs"],
   "bridge": "none",
   "iptables": false,
@@ -486,6 +489,7 @@ EOF_HOST
 elif [ "$backend" = native-nft ]; then
     cat > "$temporary" <<'EOF_NATIVE_NFT'
 {
+  "features": {"containerd-snapshotter": false},
   "exec-opts": ["native.cgroupdriver=cgroupfs"],
   "firewall-backend": "nftables",
   "iptables": true,
@@ -498,6 +502,7 @@ EOF_NATIVE_NFT
 else
     cat > "$temporary" <<'EOF_BRIDGE'
 {
+  "features": {"containerd-snapshotter": false},
   "exec-opts": ["native.cgroupdriver=cgroupfs"],
   "iptables": true,
   "ip6tables": false,
@@ -531,6 +536,8 @@ requested_policy=$policy
 resolved_backend=$backend
 network_namespace=android-shared
 cgroup_driver=cgroupfs
+image_store=classic
+containerd_snapshotter=false
 host_ipc_compatibility=$host_ipc_compatibility
 docker_cli_wrapper=$([ "$host_ipc_compatibility" = true ] && echo /usr/local/bin/docker || echo none)
 bridge_mutates_android_global_netfilter=$([ "$backend" = none ] && echo false || echo true)
@@ -541,7 +548,7 @@ chmod 0644 "${policy_record}.new"
 mv "${policy_record}.new" "$policy_record"
 sync
 
-echo "DOCKER_POLICY_SUCCEEDED: requested=$policy resolved_backend=$backend cgroup_driver=cgroupfs host_ipc_compatibility=$host_ipc_compatibility"
+echo "DOCKER_POLICY_SUCCEEDED: requested=$policy resolved_backend=$backend cgroup_driver=cgroupfs image_store=classic containerd_snapshotter=false host_ipc_compatibility=$host_ipc_compatibility"
 if [ "$backend" = none ]; then
     echo "USAGE: start containers with --network host"
 fi

@@ -53,6 +53,10 @@ grep -Fq '"ip6tables": false' "$policy_script"
 grep -Fq '"ip-forward": false' "$policy_script"
 grep -Fq '"ip-masq": false' "$policy_script"
 [[ "$(grep -Fc '"exec-opts": ["native.cgroupdriver=cgroupfs"]' "$policy_script")" -eq 4 ]]
+[[ "$(grep -Fc '"features": {"containerd-snapshotter": false}' "$policy_script")" -eq 3 ]]
+grep -Fq 'image_store=classic' "$policy_script"
+grep -Fq 'containerd_snapshotter=false' "$policy_script"
+grep -Fq 'switching image stores preserves existing data' "$policy_script"
 grep -Fq 'cgroup_driver=cgroupfs' "$policy_script"
 # shellcheck disable=SC2016 # Assert literal shell source, not this test's variables.
 grep -Fq 'host_ipc_compatibility=$host_ipc_compatibility' "$policy_script"

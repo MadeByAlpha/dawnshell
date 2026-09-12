@@ -508,6 +508,14 @@ docker run --rm --network host hello-world
 | `/dev/mqueue ... device or resource busy` | 일부 커널의 private IPC/mqueue 경로 문제입니다. 관리형 host IPC 옵션을 켜고 정책을 다시 적용합니다. |
 | `failed to unshare remaining namespaces` | 위험한 namespace 생성이 DawnShell 안전 정책 또는 커널에서 차단됐습니다. wrapper가 `--ipc=host`를 적용하는지 확인합니다. |
 | `/etc/resolv.conf: operation not permitted` | container mount callback과 커널/SELinux가 충돌했습니다. daemon 로그와 사용한 compose 설정을 수집하고 반복 재시작하지 않습니다. |
+| `mount callback failed ... /dev/console: operation not permitted` | Docker가 containerd image store를 선택했으며, 임시 snapshot 초기화가 일부 Android `/data` 파일시스템 또는 보안 정책과 호환되지 않습니다. DawnShell의 Docker 설정을 다시 적용해 classic image store를 선택하고 Docker를 재시작한 뒤, 이미지가 보이지 않으면 다시 pull합니다. |
+
+DawnShell은 관리형 Docker 설정에
+`features.containerd-snapshotter=false`를 명시합니다. 두 image store의 데이터는
+삭제되지 않지만 활성화된 store의 이미지와 컨테이너만 보입니다. store를 전환해도
+자동 마이그레이션되거나 삭제되지는 않습니다. 자세한 내용은 Docker의
+[containerd image store 문서](https://docs.docker.com/engine/storage/containerd/)를
+참고하세요.
 
 Docker bridge 모드는 Android 전역 방화벽, NAT, forwarding, route를 바꿀 수
 있습니다. 네트워크가 끊겼다면 휴대전화 화면이나 ADB로 앱을 열어 host-only 정책을
