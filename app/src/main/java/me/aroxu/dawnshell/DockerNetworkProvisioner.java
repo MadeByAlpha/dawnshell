@@ -18,30 +18,37 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
 
-/** AFU-only, explicit Docker network compatibility policy operation. */
+/** Root-backed Docker compatibility policy operation. */
 final class DockerNetworkProvisioner {
 
     private static final String TAG = "DawnShell";
     private static final String LOG_FILE = "docker-network-policy.log";
     private static final String STATUS_FILE = "docker-network-policy.status";
+    private static final String REVISION_FILE = "docker-network-policy.revision";
+    // Increment whenever an already-managed rootfs must receive a new
+    // compatibility setting without requiring the user to toggle a setting.
+    private static final int MANAGED_CONFIGURATION_REVISION = 7;
     private static final int MAX_TAIL_BYTES = 48 * 1024;
     private static final Object FILE_LOCK = new Object();
 
     private DockerNetworkProvisioner() {}
 
     static boolean apply(Context context, BfuRuntime.Layout layout, String policy,
-                         boolean hostIpcCompatibility) {
+                         boolean hostIpcCompatibility, String storageDriver) {
         Context deContext = BfuPreferences.deviceProtectedContext(context);
         LogSink log = null;
         Process process = null;
         try {
             String validated = validatePolicy(policy);
+            String validatedStorage = validateStorageDriver(storageDriver);
             log = new LogSink(logFile(deContext));
             log.line("============================================================");
             log.line("STAGE: Applying Docker network policy requested=" + validated
-                    + " host_ipc_compatibility=" + hostIpcCompatibility);
+                    + " host_ipc_compatibility=" + hostIpcCompatibility
+                    + " storage_driver=" + validatedStorage);
             writeStatus(deContext, "RUNNING requested=" + validated
-                    + " host_ipc_compatibility=" + hostIpcCompatibility);
+                    + " host_ipc_compatibility=" + hostIpcCompatibility
+                    + " storage_driver=" + validatedStorage);
 
             String command = "/system/bin/sh "
                     + BfuSu.shellQuote(
@@ -52,7 +59,8 @@ final class DockerNetworkProvisioner {
                     + " " + BfuSu.shellQuote(
                     layout.architecture.debianArchitecture)
                     + " " + BfuSu.shellQuote(
-                    Boolean.toString(hostIpcCompatibility));
+                    Boolean.toString(hostIpcCompatibility))
+                    + " " + BfuSu.shellQuote(validatedStorage);
             BfuSu.StartedProcess started = BfuSu.start(command);
             process = started.process;
             log.line("Magisk command accepted by " + started.command);
@@ -82,6 +90,7 @@ final class DockerNetworkProvisioner {
             }
 
             log.line("Docker network policy completed successfully");
+            writeManagedRevision(deContext, MANAGED_CONFIGURATION_REVISION);
             writeStatus(deContext, "SUCCEEDED "
                     + (resolvedOutcome == null
                     ? "requested=" + validated : resolvedOutcome));
@@ -108,10 +117,12 @@ final class DockerNetworkProvisioner {
     }
 
     static void recordQueued(Context context, String policy,
-                             boolean hostIpcCompatibility) {
+                             boolean hostIpcCompatibility,
+                             String storageDriver) {
         Context deContext = BfuPreferences.deviceProtectedContext(context);
         String message = "Docker policy queued: requested=" + validatePolicy(policy)
-                + " host_ipc_compatibility=" + hostIpcCompatibility;
+                + " host_ipc_compatibility=" + hostIpcCompatibility
+                + " storage_driver=" + validateStorageDriver(storageDriver);
         try (LogSink log = new LogSink(logFile(deContext))) {
             log.line("QUEUED: " + message);
             writeStatus(deContext, "QUEUED " + message);
@@ -148,6 +159,31 @@ final class DockerNetworkProvisioner {
         }
     }
 
+    /**
+     * Returns true only for rootfs installations whose Docker policy was
+     * successfully managed by an older DawnShell build. Fresh installations
+     * and deliberately unmanaged daemon.json files are left untouched.
+     */
+    static boolean needsAutomaticMigration(Context context) {
+        Context deContext = BfuPreferences.deviceProtectedContext(context);
+        try {
+            int revision = readManagedRevision(deContext);
+            if (revision > 0) {
+                return revision < MANAGED_CONFIGURATION_REVISION;
+            }
+            String status = readStatus(context);
+            if (!status.contains(" SUCCEEDED ")) return false;
+            // Successful policy state from builds predating revision files.
+            // Persist the baseline before attempting the migration so a
+            // failed/interrupted attempt is retried on the next safe start.
+            writeManagedRevision(deContext, 1);
+            return MANAGED_CONFIGURATION_REVISION > 1;
+        } catch (IOException e) {
+            Log.w(TAG, "Could not inspect Docker managed configuration revision", e);
+            return false;
+        }
+    }
+
     static String readLogTail(Context context) throws IOException {
         Context deContext = BfuPreferences.deviceProtectedContext(context);
         File file = logFile(deContext);
@@ -181,6 +217,12 @@ final class DockerNetworkProvisioner {
         return BfuPreferences.DOCKER_HOST_ONLY;
     }
 
+    private static String validateStorageDriver(String value) {
+        return BfuPreferences.DOCKER_STORAGE_VFS.equals(value)
+                ? BfuPreferences.DOCKER_STORAGE_VFS
+                : BfuPreferences.DOCKER_STORAGE_OVERLAY2;
+    }
+
     private static void recordFailure(Context deContext, LogSink log, String reason) {
         String message = reason == null || reason.isEmpty() ? "unknown failure" : reason;
         try {
@@ -206,6 +248,48 @@ final class DockerNetworkProvisioner {
             }
             if (!temporary.renameTo(destination)) {
                 throw new IOException("cannot publish Docker policy status");
+            }
+            setOwnerOnly(destination);
+        }
+    }
+
+    private static int readManagedRevision(Context deContext) throws IOException {
+        File file = new File(deContext.getFilesDir(), REVISION_FILE);
+        if (!file.isFile()) return 0;
+        try (FileInputStream input = new FileInputStream(file);
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[32];
+            int count;
+            while (output.size() < 32 && (count = input.read(buffer, 0,
+                    Math.min(buffer.length, 32 - output.size()))) >= 0) {
+                output.write(buffer, 0, count);
+            }
+            try {
+                return Integer.parseInt(new String(output.toByteArray(),
+                        StandardCharsets.US_ASCII).trim());
+            } catch (NumberFormatException e) {
+                return 0;
+            }
+        }
+    }
+
+    private static void writeManagedRevision(Context deContext, int revision)
+            throws IOException {
+        File destination = new File(deContext.getFilesDir(), REVISION_FILE);
+        File temporary = new File(deContext.getFilesDir(), REVISION_FILE + ".new");
+        byte[] contents = (Integer.toString(revision) + "\n")
+                .getBytes(StandardCharsets.US_ASCII);
+        synchronized (FILE_LOCK) {
+            try (FileOutputStream output = new FileOutputStream(temporary, false)) {
+                output.write(contents);
+                output.getFD().sync();
+            }
+            setOwnerOnly(temporary);
+            if (destination.exists() && !destination.delete()) {
+                throw new IOException("cannot replace Docker policy revision");
+            }
+            if (!temporary.renameTo(destination)) {
+                throw new IOException("cannot publish Docker policy revision");
             }
             setOwnerOnly(destination);
         }

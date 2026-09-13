@@ -22,6 +22,9 @@ grep -Fq 'CGROUP_AUTO = "auto"' "$preferences"
 grep -Fq 'DOCKER_HOST_ONLY = "host"' "$preferences"
 grep -Fq 'DOCKER_NATIVE_NFT_BRIDGE = "native_nft"' "$preferences"
 grep -Fq 'DOCKER_IPTABLES_NFT_BRIDGE = "iptables_nft"' "$preferences"
+grep -Fq 'DOCKER_STORAGE_OVERLAY2 = "overlay2"' "$preferences"
+grep -Fq 'DOCKER_STORAGE_VFS = "vfs"' "$preferences"
+grep -Fq 'KEY_DOCKER_STORAGE_DRIVER, DOCKER_STORAGE_OVERLAY2' "$preferences"
 grep -Fq 'USB_PASSTHROUGH_OFF = "off"' "$preferences"
 grep -Fq 'USB_PASSTHROUGH_DIRECT = "direct"' "$preferences"
 grep -Fq 'USB_PASSTHROUGH_EXCLUSIVE = "exclusive"' "$preferences"
@@ -53,10 +56,40 @@ grep -Fq '"ip6tables": false' "$policy_script"
 grep -Fq '"ip-forward": false' "$policy_script"
 grep -Fq '"ip-masq": false' "$policy_script"
 [[ "$(grep -Fc '"exec-opts": ["native.cgroupdriver=cgroupfs"]' "$policy_script")" -eq 4 ]]
+[[ "$(grep -Fc '"features": {"containerd-snapshotter": false}' "$policy_script")" -eq 3 ]]
+grep -Fq 'image_store=classic' "$policy_script"
+grep -Fq 'containerd_snapshotter=false' "$policy_script"
+grep -Fq 'switching image stores preserves existing data' "$policy_script"
 grep -Fq 'cgroup_driver=cgroupfs' "$policy_script"
 # shellcheck disable=SC2016 # Assert literal shell source, not this test's variables.
 grep -Fq 'host_ipc_compatibility=$host_ipc_compatibility' "$policy_script"
-grep -Fq 'rewritten+=(--ipc=host)' "$policy_script"
+grep -Fq 'injected+=(--ipc=host)' "$policy_script"
+# Android drops outbound traffic from container UIDs without AID_INET.
+grep -Fq 'injected+=(--group-add 3003)' "$policy_script"
+# The bridge driver is off under the host-only policy, so a container that
+# keeps Docker's default network would have no connectivity at all.
+grep -Fq 'injected+=(--network host)' "$policy_script"
+grep -Fq 'dawnshell_host_network' "$policy_script"
+grep -Fq 'network_mode: host' "$policy_script"
+# The bridge capability probe is read-only, so it must run even under the
+# host-only policy; otherwise the status cannot say whether host-only is a
+# choice or a kernel limitation.
+grep -Fq 'detect_bridge_support' "$policy_script"
+# shellcheck disable=SC2016 # Assert literal shell source, not this test's variables.
+grep -Fq 'bridge_support=$bridge_support' "$policy_script"
+grep -Fq 'checking whether this kernel could run a Docker bridge' "$policy_script"
+grep -Fq 'group_add:' "$policy_script"
+# A kernel without POSIX message queues must be reported, not silently hit at
+# container creation as "mounting mqueue ... no such device".
+grep -Fq 'grep -qw mqueue /proc/filesystems' "$policy_script"
+grep -Fq 'mqueue_filesystem=' "$policy_script"
+# The wrapper carries the Android network group, so it must survive the host
+# IPC switch being turned off.
+grep -Fq 'dawnshell_wrapper_conf' "$policy_script"
+if grep -Fq 'Docker host IPC compatibility wrapper disabled' "$policy_script"; then
+    echo "the managed wrapper must stay installed when host IPC is disabled" >&2
+    exit 1
+fi
 # Host IPC must be the default rather than an opt-in switch.
 grep -Fq 'KEY_DOCKER_HOST_IPC_COMPATIBILITY, true' \
     "$repo_dir/app/src/main/java/me/aroxu/dawnshell/BfuPreferences.java"
@@ -98,6 +131,15 @@ grep -Fq 'exec "$real_docker" "${rewritten[@]}"' "$policy_script"
 grep -Fq 'existing unmanaged $docker_wrapper was preserved' "$policy_script"
 grep -Fq 'use /usr/bin/docker to bypass' "$policy_script"
 grep -Fq 'android:id="@+id/docker_network_policy_group"' "$layout"
+grep -Fq 'android:id="@+id/docker_storage_driver_group"' "$layout"
+grep -Fq 'android:id="@+id/docker_storage_vfs"' "$layout"
+# The storage driver must be pinned explicitly so dockerd cannot silently pick
+# a different one after an upgrade.
+grep -Fq '"storage-driver": "overlay2",' "$policy_script"
+grep -Fq '"storage-driver": "vfs",' "$policy_script"
+grep -Fq 'Docker storage driver must be overlay2 or vfs' "$policy_script"
+# shellcheck disable=SC2016 # Assert literal shell source, not this test's variables.
+grep -Fq 'storage_driver=$storage_driver' "$policy_script"
 grep -Fq 'android:id="@+id/switch_docker_host_ipc_compatibility"' "$layout"
 grep -Fq 'android:id="@+id/cgroup_policy_group"' "$layout"
 grep -Fq 'android:id="@+id/switch_pid_namespace_fallback"' "$layout"
@@ -111,6 +153,12 @@ grep -Fq 'android:id="@+id/dashboard_navigation"' "$layout"
 grep -Fq 'requestRuntimeSettingsApply(this' "$boot_activity"
 grep -Fq 'ACTION_APPLY_RUNTIME_SETTINGS' "$boot_service"
 grep -Fq 'RUNTIME_SETTINGS_APPLIED' "$boot_service"
+grep -Fq 'applyAutomaticDockerMigration(layout, trigger)' "$boot_service"
+grep -Fq 'needsAutomaticMigration(this)' "$boot_service"
+grep -Eq 'MANAGED_CONFIGURATION_REVISION = [0-9]+;' \
+    "$repo_dir/app/src/main/java/me/aroxu/dawnshell/DockerNetworkProvisioner.java"
+grep -Fq 'writeManagedRevision(deContext, MANAGED_CONFIGURATION_REVISION)' \
+    "$repo_dir/app/src/main/java/me/aroxu/dawnshell/DockerNetworkProvisioner.java"
 if grep -Fq 'android:id="@+id/apply_host_usb_policy_button"' "$layout" \
         || grep -Fq 'android:id="@+id/apply_docker_policy_button"' "$layout"; then
     echo "USB and Docker must use the single global settings apply action" >&2

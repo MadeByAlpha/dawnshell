@@ -135,6 +135,7 @@ export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.14206865"
 - [사용자 매뉴얼](docs/user-guide.ko.md)
 - [문제 해결 가이드](docs/troubleshooting.ko.md)
 - [쉬운 용어집](docs/glossary.ko.md)
+- [커널 요구사항](docs/kernel-requirements.ko.md)
 - [FFmpeg 하드웨어 코덱 사용법](docs/ffmpeg-hardware-codec.ko.md)
 - [FFmpeg MediaCodec 문법 호환성](docs/ffmpeg-mediacodec-compatibility.ko.md)
 - [`gsmi` 가속기 상태 모니터](docs/gpu-status-tool.ko.md)

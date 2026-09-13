@@ -57,7 +57,8 @@ user, operations, and developer guide. Abbreviations are expanded in the
 - Shared native Android networking, including Wi-Fi, mobile data, VPN, and USB
   Ethernet
 - Optional raw USB sharing and VID:PID-scoped exclusive interface passthrough
-- Runtime cgroup v2 probing with a validated cgroup v1 fallback
+- Automatic runtime cgroup negotiation: use v2 when a private delegated
+  hierarchy and device-BPF gate both work, otherwise use the validated v1 fallback
 - Optional SSH-only host-PID fallback for kernels without the namespaces
   required by systemd
 - Managed Docker host-network and host-IPC compatibility policies
@@ -97,6 +98,10 @@ but it cannot unlock network credentials that Android withholds.
 Docker bridge, exclusive USB passthrough, and the CE-readable override can affect
 the whole Android host. Their in-app warnings are part of the operating contract,
 not optional background information.
+
+When DawnShell updates its managed Docker compatibility format, an existing
+managed rootfs is migrated automatically before the next Debian start. This
+never takes ownership of an unmanaged `/etc/docker/daemon.json`.
 
 ## Storage and credentials
 
@@ -141,6 +146,7 @@ key is not a production signing identity.
 - [User manual](docs/user-guide.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Glossary](docs/glossary.md)
+- [Kernel requirements](docs/kernel-requirements.md)
 - [FFmpeg hardware codec guide](docs/ffmpeg-hardware-codec.md)
 - [FFmpeg MediaCodec syntax compatibility](docs/ffmpeg-mediacodec-compatibility.md)
 - [`gsmi` accelerator status monitor](docs/gpu-status-tool.md)

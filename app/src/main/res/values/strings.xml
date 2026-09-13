@@ -112,6 +112,10 @@
     <string name="bfu_stop_confirm_title">Stop BFU Debian?</string>
     <string name="bfu_stop_confirm_message">This explicitly asks the Debian container service manager to exit gracefully and stops SSH. Unlock events do not perform this action.</string>
     <string name="bfu_stop_confirm_button">Stop Debian</string>
+    <string name="bfu_force_stop_debian_short">Force-stop stuck supervisor</string>
+    <string name="bfu_force_stop_confirm_title">Force-stop Debian?</string>
+    <string name="bfu_force_stop_confirm_message">Use this only after normal Stop fails with supervisor_did_not_release_lock. DawnShell revalidates the recorded supervisor and Debian init identities, then sends SIGKILL and waits for the kernel to release the process lock. Unsaved work is lost. It never deletes the lock file or kills an unverified PID. A process stuck in uninterruptible kernel sleep may still require an Android reboot.</string>
+    <string name="bfu_force_stop_confirm_button">Force stop</string>
     <string name="bfu_restart_confirm_title">Restart BFU Debian?</string>
     <string name="bfu_restart_confirm_message">This gracefully exits the verified Debian PID 1, starts a fresh isolated instance, then waits for D-Bus, SSH, and TCP 22 health checks. USER_UNLOCKED never performs this action.</string>
     <string name="bfu_restart_confirm_button">Restart Debian</string>
@@ -236,6 +240,11 @@
     <string name="dawnshell_docker_policy_legacy">Force legacy iptables bridge (older kernels)</string>
     <string name="dawnshell_docker_host_ipc_compatibility">Use host IPC for containers (recommended)</string>
     <string name="dawnshell_docker_host_ipc_warning">On some kernels a container that creates its own IPC namespace panics Android and reboots the device, so DawnShell blocks that call for Debian. The wrapper adds --ipc=host to docker run/create and generates a temporary docker compose override. Host IPC reduces isolation because containers share Android and Debian IPC objects. Use the global Apply button after changing it. An explicit --ipc value still wins.</string>
+    <string name="dawnshell_docker_storage_title">Container storage driver</string>
+    <string name="dawnshell_docker_storage_description">Chooses how Docker stores image layers on Android storage.</string>
+    <string name="dawnshell_docker_storage_overlay2">overlay2: shared layers, fast and compact (recommended)</string>
+    <string name="dawnshell_docker_storage_vfs">vfs: full layer copies, maximum kernel compatibility</string>
+    <string name="dawnshell_docker_storage_warning">Switch to vfs only if container creation intermittently fails with "operation not permitted" on /etc/hosts, /.dockerenv, or /dev/console. Some Android kernels reject dockerd writes through a freshly mounted overlay2 layer. vfs avoids overlay entirely, but every image layer is copied in full, so pulls are slower and use far more storage. Images and containers created under the other driver stay on disk and reappear when you switch back. Use the global Apply button after changing it.</string>
     <string name="dawnshell_docker_policy_warning">DANGER: DawnShell deliberately shares Android’s network namespace for native NIC speed. Every bridge option lets Docker modify Android-global firewall, NAT, forwarding, and routes. It can break Wi-Fi, mobile data, USB Ethernet, VPN/Tailscale, or remote access. Host-only mode disables Docker bridge/firewall management and requires Docker host networking. All managed modes use Docker’s cgroupfs driver inside DawnShell’s private delegated hierarchy; the systemd driver is incompatible with some Android kernels.</string>
     <string name="dawnshell_view_compatibility_log">View compatibility log</string>
     <string name="dawnshell_docker_policy_status">Docker policy status:\n%1$s</string>

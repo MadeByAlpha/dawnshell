@@ -32,6 +32,7 @@ DawnShell을 처음 설치하는 사용자부터 내부 구조를 검토하는 �
 | 처음 설치하고 BFU SSH를 확인하고 싶습니다 | [설치 가이드](installation.ko.md) |
 | 앱의 모든 버튼과 설정을 알고 싶습니다 | [사용자 매뉴얼](user-guide.ko.md) |
 | 오류 메시지별 원인과 확인 명령이 필요합니다 | [문제 해결 가이드](troubleshooting.ko.md) |
+| 내 커널이 무엇을 지원해야 하는지 알고 싶습니다 | [커널 요구사항](kernel-requirements.ko.md) |
 | 낯선 약어와 Linux 용어를 확인하고 싶습니다 | [쉬운 용어집](glossary.ko.md) |
 | USB 장치를 Debian에서 사용하고 싶습니다 | [사용자 매뉴얼의 USB 절](user-guide.ko.md#6-usb-공유와-패스스루) |
 | Docker를 안전하게 시작하고 싶습니다 | [사용자 매뉴얼의 Docker 절](user-guide.ko.md#9-docker) |
@@ -49,6 +50,7 @@ DawnShell을 처음 설치하는 사용자부터 내부 구조를 검토하는 �
 | [사용자 매뉴얼](user-guide.ko.md) | 앱 화면 순서, 서버 제어, SSH, 계정, USB, 영상 가속, Docker, 로그, 삭제 |
 | [문제 해결 가이드](troubleshooting.ko.md) | 부팅·root·설치·SSH·Docker·USB·코덱 오류별 점검 순서 |
 | [쉬운 용어집](glossary.ko.md) | BFU, AFU, DE, CE, rootfs, cgroup, namespace 등 |
+| [커널 요구사항](kernel-requirements.ko.md) | 필수·선택 커널 옵션, 알려진 커널 결함, 직접 빌드해야 하는 경우 |
 | [FFmpeg 하드웨어 코덱 사용법](ffmpeg-hardware-codec.ko.md) | 파일 변환, 오디오 복사, HLS, USB 웹캠, 자동 래퍼, 원시 파이프라인 |
 | [FFmpeg MediaCodec 호환성](ffmpeg-mediacodec-compatibility.ko.md) | 순정 FFmpeg 문법과 DawnShell 구현의 차이, 지원 옵션, 폴백 규칙 |
 | [`gsmi` 가속기 상태 모니터](gpu-status-tool.ko.md) | 3D GPU와 영상 코덱 엔진을 구분해 읽는 방법 |

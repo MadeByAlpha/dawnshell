@@ -14,15 +14,16 @@ fail() {
     exit "$code"
 }
 
-[ "$#" -eq 5 ] || [ "$#" -eq 6 ] || \
-    fail 2 "usage: configure-docker-network.sh ROOT BFU_ROOT POLICY DEBIAN_ARCH HOST_IPC_COMPATIBILITY [--inside-mount-ns]"
+[ "$#" -eq 6 ] || [ "$#" -eq 7 ] || \
+    fail 2 "usage: configure-docker-network.sh ROOT BFU_ROOT POLICY DEBIAN_ARCH HOST_IPC_COMPATIBILITY STORAGE_DRIVER [--inside-mount-ns]"
 
 REQUESTED_ROOT="$1"
 BFU_ROOT="$2"
 POLICY="$3"
 EXPECTED_ARCH="$4"
 HOST_IPC_COMPATIBILITY="$5"
-MODE="${6-}"
+STORAGE_DRIVER="$6"
+MODE="${7-}"
 BIN="$BFU_ROOT/bin"
 TOOLBOX="$BIN/busybox"
 FDGUARD="$BIN/dawnshell-fdguard"
@@ -47,13 +48,18 @@ case "$HOST_IPC_COMPATIBILITY" in
     true|false) ;;
     *) fail 3 "Docker host IPC compatibility must be true or false" ;;
 esac
+case "$STORAGE_DRIVER" in
+    overlay2|vfs) ;;
+    *) fail 3 "Docker storage driver must be overlay2 or vfs" ;;
+esac
 
 if [ "$MODE" != "--inside-mount-ns" ]; then
     [ -x "$TOOLBOX" ] || fail 10 "source-built DawnShell toolbox is missing"
     echo "Creating private AFU mount namespace for Docker policy"
     exec "$TOOLBOX" unshare --mount --fork \
         /system/bin/sh "$0" "$ROOT" "$BFU_ROOT" "$POLICY" \
-        "$EXPECTED_ARCH" "$HOST_IPC_COMPATIBILITY" --inside-mount-ns
+        "$EXPECTED_ARCH" "$HOST_IPC_COMPATIBILITY" "$STORAGE_DRIVER" \
+        --inside-mount-ns
 fi
 
 umask 022
@@ -139,17 +145,20 @@ DAWNSHELL_DOCKER_HOST_IPC="$HOST_IPC_COMPATIBILITY" container=dawnshell \
     container=dawnshell \
     DAWNSHELL_DOCKER_POLICY="$POLICY" \
     DAWNSHELL_DOCKER_HOST_IPC="$HOST_IPC_COMPATIBILITY" \
+    DAWNSHELL_DOCKER_STORAGE="$STORAGE_DRIVER" \
     /bin/bash -s <<'DEBIAN_POLICY'
 set -Eeuo pipefail
 
 policy="${DAWNSHELL_DOCKER_POLICY:?}"
 host_ipc_compatibility="${DAWNSHELL_DOCKER_HOST_IPC:?}"
+storage_driver="${DAWNSHELL_DOCKER_STORAGE:?}"
 docker_dir=/etc/docker
 daemon_json=$docker_dir/daemon.json
 managed_hash=$docker_dir/.dawnshell-daemon-json.sha256
 policy_record=/etc/dawnshell/docker-network-policy
 docker_wrapper=/usr/local/bin/docker
 docker_wrapper_hash=/etc/dawnshell/docker-wrapper.sha256
+docker_wrapper_conf=/etc/dawnshell/docker-wrapper.conf
 
 source /etc/os-release
 [ "${VERSION_CODENAME:-}" = trixie ] || {
@@ -160,6 +169,14 @@ if command -v dockerd >/dev/null 2>&1; then
     echo "PROBE: dockerd is installed"
 else
     echo "WARNING: dockerd is not installed yet; policy will apply on future installation"
+fi
+if grep -qw mqueue /proc/filesystems; then
+    mqueue_supported=true
+    echo "PROBE: kernel provides the mqueue filesystem"
+else
+    mqueue_supported=false
+    echo "WARNING: kernel has no mqueue filesystem; a container with a private IPC namespace fails with 'mounting \"mqueue\" ... no such device'"
+    echo "WARNING: keep Docker host IPC compatibility enabled on this kernel so the wrapper skips that mount"
 fi
 command -v sha256sum >/dev/null 2>&1 || {
     echo "ERROR: sha256sum is missing"
@@ -201,17 +218,36 @@ verify_managed_wrapper() {
 
 configure_host_ipc_wrapper() {
     verify_managed_wrapper
-    if [ "$host_ipc_compatibility" = false ]; then
-        rm -f "$docker_wrapper" "$docker_wrapper_hash"
-        echo "POLICY: Docker host IPC compatibility wrapper disabled"
-        return
+    install -d -m 0755 -o root -g root /usr/local/bin /etc/dawnshell
+    # The wrapper body stays byte-identical whatever the switches are, so the
+    # managed hash does not churn when one is toggled. The runtime decision is
+    # read from this companion file instead. The Android network group is
+    # always injected because without it a container that drops to a non-root
+    # user can accept connections but never transmit a reply.
+    # Under the host-only policy the bridge driver is disabled, so a container
+    # that keeps Docker's default network has no working connectivity at all.
+    # The wrapper therefore supplies host networking unless the caller asked
+    # for a specific network.
+    if [ "$backend" = none ]; then
+        host_network=true
+    else
+        host_network=false
     fi
-
-    install -d -m 0755 -o root -g root /usr/local/bin
+    printf 'dawnshell_host_ipc=%s\ndawnshell_host_network=%s\n' \
+        "$host_ipc_compatibility" "$host_network" > "$docker_wrapper_conf"
+    chown 0:0 "$docker_wrapper_conf"
+    chmod 0644 "$docker_wrapper_conf"
     wrapper_temporary="${docker_wrapper}.dawnshell.$$"
     cat > "$wrapper_temporary" <<'EOF_DOCKER_WRAPPER'
 #!/bin/bash
 set -e
+
+dawnshell_host_ipc=true
+dawnshell_host_network=true
+dawnshell_wrapper_conf="${DAWNSHELL_WRAPPER_CONF:-/etc/dawnshell/docker-wrapper.conf}"
+if [ -r "$dawnshell_wrapper_conf" ]; then
+    . "$dawnshell_wrapper_conf"
+fi
 
 real_docker=/usr/bin/docker
 [ -x "$real_docker" ] || {
@@ -288,20 +324,32 @@ if (( ${#arguments[@]} > 0 )); then
                     # Compose merges later files over earlier ones, so a
                     # service that already declares `ipc:` must be skipped to
                     # keep the user's own value.
-                    declared="$("$real_docker" compose "${compose_options[@]}" \
+                    declared_ipc="$("$real_docker" compose "${compose_options[@]}" \
                         config 2>/dev/null \
                         | awk '/^  [A-Za-z0-9._-]+:$/ { gsub(/[ :]/, "", $0); service = $0 }
                                /^    ipc:/ { print service }')"
+                    declared_network="$("$real_docker" compose "${compose_options[@]}" \
+                        config 2>/dev/null \
+                        | awk '/^  [A-Za-z0-9._-]+:$/ { gsub(/[ :]/, "", $0); service = $0 }
+                               /^    (network_mode|networks):/ { print service }')"
                     override="$(mktemp /tmp/dawnshell-compose-ipc.XXXXXX.yml)"
                     trap 'rm -f "$override"' EXIT
                     {
                         printf 'services:\n'
                         while IFS= read -r service; do
                             [ -n "$service" ] || continue
-                            if printf '%s\n' "$declared" | grep -Fxq "$service"; then
-                                continue
+                            printf '  %s:\n' "$service"
+                            if [ "$dawnshell_host_ipc" = true ] \
+                                    && ! printf '%s\n' "$declared_ipc" \
+                                        | grep -Fxq "$service"; then
+                                printf '    ipc: host\n'
                             fi
-                            printf '  %s:\n    ipc: host\n' "$service"
+                            if [ "$dawnshell_host_network" = true ] \
+                                    && ! printf '%s\n' "$declared_network" \
+                                        | grep -Fxq "$service"; then
+                                printf '    network_mode: host\n'
+                            fi
+                            printf '    group_add:\n      - "3003"\n'
                         done <<< "$services"
                     } > "$override"
                     # Compose keeps its own project discovery, so only the
@@ -318,14 +366,35 @@ fi
 
 if (( command_index >= 0 )); then
     explicit_ipc=false
+    explicit_inet_group=false
+    explicit_network=false
+    previous=""
     for argument in "${arguments[@]}"; do
         case "$argument" in
             --ipc|--ipc=*) explicit_ipc=true ;;
+            --group-add=3003) explicit_inet_group=true ;;
+            --network|--network=*|--net|--net=*) explicit_network=true ;;
         esac
+        if [ "$previous" = --group-add ] && [ "$argument" = 3003 ]; then
+            explicit_inet_group=true
+        fi
+        previous="$argument"
     done
-    if [ "$explicit_ipc" = false ]; then
+    injected=()
+    if [ "$dawnshell_host_ipc" = true ] && [ "$explicit_ipc" = false ]; then
+        injected+=(--ipc=host)
+    fi
+    # Android blocks outbound traffic from UIDs without AID_INET (GID 3003).
+    # Images that drop privileges to a non-root user therefore accept the
+    # connection but never transmit a reply. The supplementary group restores
+    # network access without granting root inside the container.
+    [ "$explicit_inet_group" = true ] || injected+=(--group-add 3003)
+    if [ "$dawnshell_host_network" = true ] && [ "$explicit_network" = false ]; then
+        injected+=(--network host)
+    fi
+    if (( ${#injected[@]} > 0 )); then
         rewritten=("${arguments[@]:0:$((command_index + 1))}")
-        rewritten+=(--ipc=host)
+        rewritten+=("${injected[@]}")
         rewritten+=("${arguments[@]:$((command_index + 1))}")
         exec "$real_docker" "${rewritten[@]}"
     fi
@@ -340,8 +409,17 @@ EOF_DOCKER_WRAPPER
     printf '%s\n' "$new_wrapper_hash" > "$docker_wrapper_hash"
     chown 0:0 "$docker_wrapper_hash"
     chmod 0600 "$docker_wrapper_hash"
-    echo "POLICY: Docker run/create wrapper enables --ipc=host by default"
-    echo "WARNING: containers share Android/Debian host IPC; use /usr/bin/docker to bypass"
+    if [ "$host_ipc_compatibility" = true ]; then
+        echo "POLICY: Docker run/create wrapper adds --ipc=host and --group-add 3003 (Android AID_INET)"
+        echo "WARNING: containers share Android/Debian host IPC; use /usr/bin/docker to bypass"
+    else
+        echo "POLICY: Docker run/create wrapper adds --group-add 3003 (Android AID_INET) only"
+        echo "WARNING: without host IPC a container that creates its own IPC namespace can panic or fail to start on affected kernels"
+    fi
+    if [ "$host_network" = true ]; then
+        echo "POLICY: Docker run/create wrapper adds --network host because the bridge driver is disabled"
+        echo "WARNING: host networking discards -p published ports; a container listens on the Android port directly"
+    fi
 }
 
 probe_iptables_check() {
@@ -404,10 +482,37 @@ EOF_NATIVE_PROBE
     return "$result"
 }
 
+# The capability checks are read-only, so they can run even when the bridge is
+# deliberately disabled. Reporting the result makes it obvious whether the
+# host-only fallback is a DawnShell policy choice or a kernel limitation.
+detect_bridge_support() {
+    if probe_native_nft; then
+        bridge_support=native-nft
+        return
+    fi
+    if probe_iptables_backend /usr/sbin/iptables-nft; then
+        bridge_support=iptables-nft
+        return
+    fi
+    if probe_iptables_backend /usr/sbin/iptables-legacy; then
+        bridge_support=legacy
+        return
+    fi
+    bridge_support=unavailable
+}
+
 backend=none
+bridge_support=unavailable
 case "$policy" in
     host)
-        echo "POLICY: safe host-network-only mode; no firewall backend probe needed"
+        echo "POLICY: safe host-network-only mode"
+        echo "PROBE: checking whether this kernel could run a Docker bridge"
+        detect_bridge_support
+        if [ "$bridge_support" = unavailable ]; then
+            echo "PROBE: bridge unavailable; this kernel is missing Docker's required addrtype, masquerade, or conntrack capabilities"
+        else
+            echo "PROBE: bridge would be available through $bridge_support if the policy is changed"
+        fi
         ;;
     auto)
         echo "PROBE: trying native Docker nftables first"
@@ -469,11 +574,33 @@ case "$backend" in
 esac
 [ "$backend" = none ] || \
     echo "WARNING: bridge mode can mutate Android-global firewall, NAT, routes, and forwarding"
+# Any policy other than host already proved its backend, so reuse that result
+# instead of probing the kernel a second time.
+[ "$policy" = host ] || bridge_support=$backend
+echo "POLICY: disabling Docker's containerd snapshotter for Android /data compatibility"
+echo "WARNING: switching image stores preserves existing data but images and containers from the other store are hidden until it is re-enabled"
+
+# Some Android kernels intermittently fail dockerd's writes through a freshly
+# created overlay2 merged mount with EPERM, which aborts container creation
+# with "operation not permitted" on /etc/hosts, /.dockerenv, or /dev/console.
+# The vfs driver copies each layer into a plain directory and avoids overlay
+# copy-up entirely.
+storage_entry='  "storage-driver": "overlay2",'
+if [ "$storage_driver" = vfs ]; then
+    storage_entry='  "storage-driver": "vfs",'
+    echo "POLICY: using the vfs storage driver for maximum kernel compatibility"
+    echo "WARNING: vfs copies every image layer, so pulls are slower and use far more disk"
+    echo "WARNING: images and containers built under overlay2 remain on disk but stay hidden until overlay2 is selected again"
+else
+    echo "POLICY: using the overlay2 storage driver"
+fi
 
 temporary="$docker_dir/.daemon.json.dawnshell.$$"
 if [ "$backend" = none ]; then
-    cat > "$temporary" <<'EOF_HOST'
+    cat > "$temporary" <<EOF_HOST
 {
+$storage_entry
+  "features": {"containerd-snapshotter": false},
   "exec-opts": ["native.cgroupdriver=cgroupfs"],
   "bridge": "none",
   "iptables": false,
@@ -484,8 +611,10 @@ if [ "$backend" = none ]; then
 }
 EOF_HOST
 elif [ "$backend" = native-nft ]; then
-    cat > "$temporary" <<'EOF_NATIVE_NFT'
+    cat > "$temporary" <<EOF_NATIVE_NFT
 {
+$storage_entry
+  "features": {"containerd-snapshotter": false},
   "exec-opts": ["native.cgroupdriver=cgroupfs"],
   "firewall-backend": "nftables",
   "iptables": true,
@@ -496,8 +625,10 @@ elif [ "$backend" = native-nft ]; then
 }
 EOF_NATIVE_NFT
 else
-    cat > "$temporary" <<'EOF_BRIDGE'
+    cat > "$temporary" <<EOF_BRIDGE
 {
+$storage_entry
+  "features": {"containerd-snapshotter": false},
   "exec-opts": ["native.cgroupdriver=cgroupfs"],
   "iptables": true,
   "ip6tables": false,
@@ -531,8 +662,12 @@ requested_policy=$policy
 resolved_backend=$backend
 network_namespace=android-shared
 cgroup_driver=cgroupfs
+image_store=classic
+containerd_snapshotter=false
 host_ipc_compatibility=$host_ipc_compatibility
-docker_cli_wrapper=$([ "$host_ipc_compatibility" = true ] && echo /usr/local/bin/docker || echo none)
+docker_cli_wrapper=/usr/local/bin/docker
+mqueue_filesystem=$mqueue_supported
+bridge_support=$bridge_support
 bridge_mutates_android_global_netfilter=$([ "$backend" = none ] && echo false || echo true)
 configured_epoch=$(date +%s)
 EOF_RECORD
@@ -541,7 +676,7 @@ chmod 0644 "${policy_record}.new"
 mv "${policy_record}.new" "$policy_record"
 sync
 
-echo "DOCKER_POLICY_SUCCEEDED: requested=$policy resolved_backend=$backend cgroup_driver=cgroupfs host_ipc_compatibility=$host_ipc_compatibility"
+echo "DOCKER_POLICY_SUCCEEDED: requested=$policy resolved_backend=$backend bridge_support=$bridge_support cgroup_driver=cgroupfs image_store=classic containerd_snapshotter=false host_ipc_compatibility=$host_ipc_compatibility storage_driver=$storage_driver mqueue_filesystem=$mqueue_supported"
 if [ "$backend" = none ]; then
     echo "USAGE: start containers with --network host"
 fi

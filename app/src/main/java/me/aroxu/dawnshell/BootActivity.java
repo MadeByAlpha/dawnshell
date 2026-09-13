@@ -65,6 +65,7 @@ public class BootActivity extends AppCompatActivity {
     private CompoundButton pidNamespaceFallback;
     private RadioGroup cgroupPolicyGroup;
     private RadioGroup dockerNetworkPolicyGroup;
+    private RadioGroup dockerStorageDriverGroup;
     private CompoundButton dockerHostIpcCompatibility;
     private CompoundButton hardwareCodecBridge;
     private RadioGroup usbPassthroughGroup;
@@ -255,6 +256,7 @@ public class BootActivity extends AppCompatActivity {
         pidNamespaceFallback = findViewById(R.id.switch_pid_namespace_fallback);
         cgroupPolicyGroup = findViewById(R.id.cgroup_policy_group);
         dockerNetworkPolicyGroup = findViewById(R.id.docker_network_policy_group);
+        dockerStorageDriverGroup = findViewById(R.id.docker_storage_driver_group);
         dockerHostIpcCompatibility = findViewById(
                 R.id.switch_docker_host_ipc_compatibility);
         hardwareCodecBridge = findViewById(
@@ -344,6 +346,8 @@ public class BootActivity extends AppCompatActivity {
                 requestLifecycle(DebianLauncher.Operation.STATUS));
         findViewById(R.id.stop_debian_button)
                 .setOnClickListener(view -> confirmStopDebian());
+        findViewById(R.id.force_stop_debian_button)
+                .setOnClickListener(view -> confirmForceStopDebian());
         findViewById(R.id.export_private_key_button)
                 .setOnClickListener(view -> confirmPrivateKeyFileExport());
         findViewById(R.id.copy_key_import_button)
@@ -376,6 +380,7 @@ public class BootActivity extends AppCompatActivity {
                 refreshSettingsDirtyState();
         cgroupPolicyGroup.setOnCheckedChangeListener(radioListener);
         dockerNetworkPolicyGroup.setOnCheckedChangeListener(radioListener);
+        dockerStorageDriverGroup.setOnCheckedChangeListener(radioListener);
         dockerHostIpcCompatibility.setOnCheckedChangeListener(listener);
         hardwareCodecBridge.setOnCheckedChangeListener(listener);
         usbPassthroughGroup.setOnCheckedChangeListener((group, checkedId) -> {
@@ -886,6 +891,7 @@ public class BootActivity extends AppCompatActivity {
         pidNamespaceFallback.setChecked(BfuPreferences.pidNamespaceFallback(this));
         selectCgroupPolicy(BfuPreferences.cgroupPolicy(this));
         selectDockerNetworkPolicy(BfuPreferences.dockerNetworkPolicy(this));
+        selectDockerStorageDriver(BfuPreferences.dockerStorageDriver(this));
         dockerHostIpcCompatibility.setChecked(
                 BfuPreferences.dockerHostIpcCompatibility(this));
         hardwareCodecBridge.setChecked(BfuPreferences.hardwareCodecBridge(this));
@@ -1672,6 +1678,7 @@ public class BootActivity extends AppCompatActivity {
                 settings.allowCeReadableBfu, settings.cgroupPolicy,
                 settings.pidNamespaceFallback,
                 settings.dockerPolicy, settings.dockerHostIpc,
+                settings.dockerStorage,
                 settings.usbMode, settings.usbDeviceIds,
                 settings.hardwareCodec);
         usbExclusiveDeviceIds.setText(settings.usbDeviceIds);
@@ -1748,6 +1755,19 @@ public class BootActivity extends AppCompatActivity {
         return BfuPreferences.DOCKER_HOST_ONLY;
     }
 
+    private void selectDockerStorageDriver(String driver) {
+        dockerStorageDriverGroup.check(
+                BfuPreferences.DOCKER_STORAGE_VFS.equals(driver)
+                        ? R.id.docker_storage_vfs
+                        : R.id.docker_storage_overlay2);
+    }
+
+    private String selectedDockerStorageDriver() {
+        return dockerStorageDriverGroup.getCheckedRadioButtonId() == R.id.docker_storage_vfs
+                ? BfuPreferences.DOCKER_STORAGE_VFS
+                : BfuPreferences.DOCKER_STORAGE_OVERLAY2;
+    }
+
     private static final class SettingsSnapshot {
         final boolean enabled;
         final boolean allowCeReadableBfu;
@@ -1755,6 +1775,7 @@ public class BootActivity extends AppCompatActivity {
         final boolean pidNamespaceFallback;
         final String dockerPolicy;
         final boolean dockerHostIpc;
+        final String dockerStorage;
         final String usbMode;
         final String usbDeviceIds;
         final boolean hardwareCodec;
@@ -1762,7 +1783,8 @@ public class BootActivity extends AppCompatActivity {
         SettingsSnapshot(boolean enabled, boolean allowCeReadableBfu,
                          String cgroupPolicy, boolean pidNamespaceFallback,
                          String dockerPolicy,
-                         boolean dockerHostIpc, String usbMode,
+                         boolean dockerHostIpc, String dockerStorage,
+                         String usbMode,
                          String usbDeviceIds, boolean hardwareCodec) {
             this.enabled = enabled;
             this.allowCeReadableBfu = allowCeReadableBfu;
@@ -1770,6 +1792,7 @@ public class BootActivity extends AppCompatActivity {
             this.pidNamespaceFallback = pidNamespaceFallback;
             this.dockerPolicy = dockerPolicy;
             this.dockerHostIpc = dockerHostIpc;
+            this.dockerStorage = dockerStorage;
             this.usbMode = usbMode;
             this.usbDeviceIds = usbDeviceIds;
             this.hardwareCodec = hardwareCodec;
@@ -1782,6 +1805,7 @@ public class BootActivity extends AppCompatActivity {
                     BfuPreferences.pidNamespaceFallback(context),
                     BfuPreferences.dockerNetworkPolicy(context),
                     BfuPreferences.dockerHostIpcCompatibility(context),
+                    BfuPreferences.dockerStorageDriver(context),
                     BfuPreferences.usbPassthroughMode(context),
                     BfuPreferences.usbExclusiveDeviceIds(context),
                     BfuPreferences.hardwareCodecBridge(context));
@@ -1816,7 +1840,8 @@ public class BootActivity extends AppCompatActivity {
                     activity.selectedCgroupPolicy(),
                     activity.pidNamespaceFallback.isChecked(),
                     activity.selectedDockerNetworkPolicy(),
-                    activity.dockerHostIpcCompatibility.isChecked(), mode,
+                    activity.dockerHostIpcCompatibility.isChecked(),
+                    activity.selectedDockerStorageDriver(), mode,
                     normalizedIds, activity.hardwareCodecBridge.isChecked());
         }
 
@@ -1828,6 +1853,7 @@ public class BootActivity extends AppCompatActivity {
                     && pidNamespaceFallback == other.pidNamespaceFallback
                     && dockerPolicy.equals(other.dockerPolicy)
                     && dockerHostIpc == other.dockerHostIpc
+                    && dockerStorage.equals(other.dockerStorage)
                     && usbMode.equals(other.usbMode)
                     && usbDeviceIds.equals(other.usbDeviceIds)
                     && hardwareCodec == other.hardwareCodec;
@@ -1840,7 +1866,8 @@ public class BootActivity extends AppCompatActivity {
 
         boolean dockerChanged(SettingsSnapshot previous) {
             return !dockerPolicy.equals(previous.dockerPolicy)
-                    || dockerHostIpc != previous.dockerHostIpc;
+                    || dockerHostIpc != previous.dockerHostIpc
+                    || !dockerStorage.equals(previous.dockerStorage);
         }
 
         boolean cgroupChanged(SettingsSnapshot previous) {
@@ -1938,6 +1965,17 @@ public class BootActivity extends AppCompatActivity {
                 .setPositiveButton(R.string.bfu_stop_confirm_button,
                         (dialog, which) -> requestLifecycle(
                                 DebianLauncher.Operation.STOP))
+                .show();
+    }
+
+    private void confirmForceStopDebian() {
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.bfu_force_stop_confirm_title)
+                .setMessage(R.string.bfu_force_stop_confirm_message)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.bfu_force_stop_confirm_button,
+                        (dialog, which) -> requestLifecycle(
+                                DebianLauncher.Operation.FORCE_STOP))
                 .show();
     }
 

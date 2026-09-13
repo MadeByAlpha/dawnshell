@@ -33,6 +33,7 @@ Use the [user manual](user-guide.md) for routine operation and the
 | Install DawnShell and prove BFU SSH | [Installation guide](installation.md) |
 | Understand every app control | [User manual](user-guide.md) |
 | Diagnose a specific error | [Troubleshooting guide](troubleshooting.md) |
+| Know what my kernel must support | [Kernel requirements](kernel-requirements.md) |
 | Look up an abbreviation | [Glossary](glossary.md) |
 | Use a USB device from Debian | [USB sharing and passthrough](user-guide.md#5-usb-sharing-and-passthrough) |
 | Run Docker safely | [Docker](user-guide.md#8-docker) |
@@ -50,6 +51,7 @@ Use the [user manual](user-guide.md) for routine operation and the
 | [User manual](user-guide.md) | Every app section, lifecycle, SSH, accounts, USB, codecs, Docker, logs, removal |
 | [Troubleshooting](troubleshooting.md) | Boot, root, install, SSH, Docker, USB, and codec failure playbooks |
 | [Glossary](glossary.md) | BFU, AFU, DE, CE, rootfs, cgroups, namespaces, and other terms |
+| [Kernel requirements](kernel-requirements.md) | Required and optional kernel options, known kernel defects, and when to build your own |
 | [FFmpeg hardware codec](ffmpeg-hardware-codec.md) | File conversion, audio copy, HLS, USB webcams, automatic wrappers, raw pipelines |
 | [FFmpeg MediaCodec compatibility](ffmpeg-mediacodec-compatibility.md) | Accepted upstream syntax, supported options, and fallback rules |
 | [`gsmi` accelerator monitor](gpu-status-tool.md) | Reading 3D GPU and video-codec activity separately |

@@ -508,6 +508,87 @@ docker run --rm --network host hello-world
 | `/dev/mqueue ... device or resource busy` | 일부 커널의 private IPC/mqueue 경로 문제입니다. 관리형 host IPC 옵션을 켜고 정책을 다시 적용합니다. |
 | `failed to unshare remaining namespaces` | 위험한 namespace 생성이 DawnShell 안전 정책 또는 커널에서 차단됐습니다. wrapper가 `--ipc=host`를 적용하는지 확인합니다. |
 | `/etc/resolv.conf: operation not permitted` | container mount callback과 커널/SELinux가 충돌했습니다. daemon 로그와 사용한 compose 설정을 수집하고 반복 재시작하지 않습니다. |
+| `mount callback failed ... /dev/console: operation not permitted` | Docker가 containerd image store를 선택했으며, 임시 snapshot 초기화가 일부 Android `/data` 파일시스템 또는 보안 정책과 호환되지 않습니다. 현재 DawnShell은 이전에 DawnShell이 관리하던 정책을 다음 Debian 시작 전에 classic image store로 자동 마이그레이션합니다. Debian을 한 번 재시작한 뒤 이미지가 보이지 않으면 다시 pull합니다. 사용자가 직접 관리하는 `daemon.json`은 의도적으로 변경하지 않습니다. |
+| 컨테이너 생성이 `/etc/hosts`, `/.dockerenv`, `/dev/console` 또는 이미지 엔트리포인트에서 `operation not permitted`로 무작위 실패 | 일부 Android 커널은 갓 마운트된 `overlay2` 레이어에 dockerd가 쓰는 것을 간헐적으로 거부합니다. 같은 이미지가 다음 시도에서는 정상 실행돼 무작위처럼 보입니다. 고급 페이지에서 **컨테이너 저장 방식**을 **vfs**로 바꾸고 적용을 누르세요. |
+
+`vfs`는 이미지 레이어를 overlayfs로 쌓지 않고 통째로 복사하므로 실패하는 커널
+경로를 피합니다. 대신 내려받기가 느리고 저장 공간을 훨씬 많이 씁니다. 다른
+드라이버로 만든 이미지와 컨테이너는 디스크에 남아 있다가 되돌리면 다시 보입니다.
+
+### `mounting "mqueue" ... no such device`
+
+커널에 POSIX 메시지 큐 파일시스템이 없어서, 자체 IPC 네임스페이스를 쓰는 컨테이너가
+`/dev/mqueue`를 만들지 못하는 경우입니다. `grep -w mqueue /proc/filesystems`로
+확인하세요. 결과가 없으면 커널에 지원이 없는 것입니다. 파일시스템은 있는데 마운트가
+충돌할 때 나오는 `device or resource busy`와는 다른 원인입니다.
+
+컨테이너가 호스트 IPC를 쓰면 Docker가 이 마운트를 아예 생략하므로, **Docker 호스트
+IPC 호환**을 켠 상태로 정책을 다시 적용하면 해결됩니다. `command -v docker`가
+`/usr/local/bin/docker`로 나오는지 확인하세요. `/usr/bin/docker`를 직접 부르면
+관리형 래퍼를 건너뜁니다. 일회성으로는 `--ipc=host`를, Compose에서는 서비스마다
+`ipc: host`를 넣으면 됩니다.
+
+### 컨테이너 포트가 연결은 받는데 응답이 없음
+
+Android는 프로세스의 UID가 `AID_INET` 그룹(GID 3003)에 속할 때만 네트워크 송신을
+허용합니다. 많은 이미지가 권한을 일반 사용자로 낮추기 때문에, 컨테이너가 TCP 연결을
+수락하고 요청까지 ACK한 뒤 응답을 전혀 내보내지 못합니다. 클라이언트에서는 거절이
+아니라 멈춤으로 보입니다.
+
+DawnShell의 관리형 `docker` 래퍼가 `run`과 `create`, 그리고 자동 생성하는
+`compose` override에 `--group-add 3003`을 넣습니다. 정책을 적용한 뒤 오래 떠 있던
+컨테이너는 한 번 다시 만들어야 반영됩니다. `/usr/bin/docker`를 직접 부르면 래퍼를
+건너뛰므로 그때는 직접 `--group-add 3003`을 붙이세요.
+
+### 컨테이너에 네트워크가 아예 없음
+
+기본값인 호스트 전용 정책에서는 bridge 드라이버가 꺼져 있어서, Docker 기본 네트워크를
+그대로 쓰는 컨테이너는 아무 곳에도 닿지 못하고 `WARNING: IPv4 forwarding is disabled`만
+남깁니다. 그래서 래퍼가 `run`과 `create`에 `--network host`를, Compose override에
+`network_mode: host`를 함께 넣습니다. 명령이나 서비스가 네트워크를 이미 지정했다면
+건드리지 않습니다.
+
+호스트 네트워크는 `-p` 포트 매핑을 무시합니다. 서비스가 Android 포트에 직접 붙기
+때문에 `-p 8080:80`을 줘도 80번에서 서비스됩니다. 포트 매핑이 꼭 필요하면 앱에서
+bridge 정책을 고르거나, 서비스 설정에서 포트를 바꾸세요.
+
+bridge 정책이 애초에 가능한 기기인지는 호스트 전용을 쓰는 중에도 매번 적용할 때마다
+보고합니다. 고급 페이지의 Docker 정책 상태에서 `bridge_support`를 보세요.
+
+| 값 | 의미 |
+| --- | --- |
+| `unavailable` | 커널에 `addrtype` 매치, `MASQUERADE` 타깃, 또는 동작하는 nftables가 없습니다. 어떤 bridge 정책도 성공할 수 없습니다. |
+| `legacy`, `iptables-nft`, `native-nft` | 해당 백엔드로 bridge 정책이 동작합니다. |
+
+`unavailable`이 나오는 커널에서 bridge를 쓰려면 `CONFIG_NETFILTER_XT_MATCH_ADDRTYPE`와
+`CONFIG_IP_NF_TARGET_MASQUERADE`가 켜진 커널이 필요합니다.
+전체 옵션 목록과 지원하지 않을 때의 대처는 [커널 요구사항](kernel-requirements.ko.md)에
+정리해 두었습니다.
+
+### 응답 헤더는 오는데 본문이 오지 않음
+
+일부 Android Wi-Fi 드라이버는 zero-copy `sendfile()` 전송을 조용히 버립니다.
+루프백과 Tailscale 같은 VPN 인터페이스는 영향을 받지 않아서, 같은 서비스가 tailnet
+주소로는 되고 LAN 주소로만 멈추는 현상이 나옵니다. Wi-Fi 인터페이스를 패킷 캡처하면
+요청은 ACK되는데 응답 세그먼트가 아예 나가지 않는 것이 보입니다.
+
+서비스에서 `sendfile`을 끄세요. nginx는 `http`, `server`, `location` 블록에
+`sendfile off;`를 넣으면 되고, Apache는 `EnableSendfile Off`입니다. CPU를 조금 더
+쓰는 것 외에 다른 변경은 필요 없습니다.
+
+일반 **중지**가 `supervisor_did_not_release_lock`으로 끝나면 홈 화면의
+**멈춘 감독 프로세스 강제 종료**를 사용할 수 있습니다. 이 기능은 저장된 PID
+숫자만 믿지 않고 프로세스 시작 시각과 실행 파일 inode를 다시 확인한 뒤 Debian
+init과 supervisor에만 `SIGKILL`을 보냅니다. lock 파일 자체는 삭제하지 않습니다.
+강제 종료 후에도 커널이 lock을 반환하지 않으면 해당 프로세스가 중단 불가능한
+커널 대기 상태일 수 있으므로 Android를 재부팅해야 합니다.
+
+DawnShell은 관리형 Docker 설정에
+`features.containerd-snapshotter=false`를 명시합니다. 두 image store의 데이터는
+삭제되지 않지만 활성화된 store의 이미지와 컨테이너만 보입니다. store를 전환해도
+자동 마이그레이션되거나 삭제되지는 않습니다. 자세한 내용은 Docker의
+[containerd image store 문서](https://docs.docker.com/engine/storage/containerd/)를
+참고하세요.
 
 Docker bridge 모드는 Android 전역 방화벽, NAT, forwarding, route를 바꿀 수
 있습니다. 네트워크가 끊겼다면 휴대전화 화면이나 ADB로 앱을 열어 host-only 정책을

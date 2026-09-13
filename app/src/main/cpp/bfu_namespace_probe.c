@@ -4453,6 +4453,80 @@ static int run_codec_long_run(const char *root, const char *control_dir,
                                     operation, 20);
 }
 
+/* Android's root cgroup namespace exposes DawnShell's delegated subtree as
+   /dawnshell/..., so a surviving instance can be located from /proc without
+   trusting the recorded state. That matters because a force stop clears the
+   state, and a cleared record is exactly when the operator needs the leftover
+   to be found. Without this the next start fails deep inside cgroup setup
+   with a bare EBUSY instead of naming the real problem. */
+static bool cgroup_path_is_delegated(const char *path) {
+    size_t length = strlen(kCgroupChildName);
+    if (path[0] != '/') return false;
+    if (strncmp(path + 1, kCgroupChildName, length) != 0) return false;
+    char separator = path[1 + length];
+    return separator == '\0' || separator == '/';
+}
+
+static bool process_in_delegated_cgroup(pid_t pid) {
+    char path[PATH_MAX];
+    int count = snprintf(path, sizeof(path), "/proc/%d/cgroup", (int) pid);
+    if (count < 0 || (size_t) count >= sizeof(path)) return false;
+    int fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return false;
+    char contents[4096];
+    ssize_t length = read(fd, contents, sizeof(contents) - 1);
+    close(fd);
+    if (length <= 0) return false;
+    contents[length] = '\0';
+    char *save = NULL;
+    for (char *line = strtok_r(contents, "\n", &save); line != NULL;
+         line = strtok_r(NULL, "\n", &save)) {
+        const char *value = strrchr(line, ':');
+        if (value != NULL && cgroup_path_is_delegated(value + 1)) return true;
+    }
+    return false;
+}
+
+static size_t collect_delegated_processes(pid_t *pids, size_t capacity) {
+    DIR *directory = opendir("/proc");
+    if (directory == NULL) return 0;
+    size_t count = 0;
+    struct dirent *entry;
+    while (count < capacity && (entry = readdir(directory)) != NULL) {
+        char *end = NULL;
+        long value = strtol(entry->d_name, &end, 10);
+        if (end == NULL || *end != '\0' || value <= 1) continue;
+        pid_t pid = (pid_t) value;
+        if (pid == getpid()) continue;
+        if (process_in_delegated_cgroup(pid)) pids[count++] = pid;
+    }
+    closedir(directory);
+    return count;
+}
+
+/* Signals the delegated subtree children first. A PID namespace init that
+   still has children can refuse to exit, and killing it before them would
+   leave them without a reaper, so the lowest PID in the subtree, which is the
+   init, is always signalled last. */
+static size_t terminate_delegated_processes(void) {
+    pid_t pids[512];
+    for (int round = 0; round < 5; round++) {
+        size_t count = collect_delegated_processes(pids, 512);
+        if (count == 0) return 0;
+        size_t lowest = 0;
+        for (size_t index = 1; index < count; index++) {
+            if (pids[index] < pids[lowest]) lowest = index;
+        }
+        for (size_t index = 0; index < count; index++) {
+            if (index != lowest) (void) kill(pids[index], SIGKILL);
+        }
+        usleep(200000);
+        (void) kill(pids[lowest], SIGKILL);
+        usleep(300000);
+    }
+    return collect_delegated_processes(pids, 512);
+}
+
 static int run_start(const char *root, const char *control_dir,
                      const char *log_path, CgroupPolicy cgroup_policy,
                      bool allow_fallback,
@@ -4508,6 +4582,17 @@ static int run_start(const char *root, const char *control_dir,
                             strcmp(stale.launch_mode, "compat") == 0
                             ? "verified_compat_sshd_exists_without_supervisor"
                             : "verified_systemd_pid1_exists_without_supervisor", 89);
+    }
+    pid_t leftovers[4];
+    size_t leftover_count = collect_delegated_processes(leftovers,
+                                                        sizeof(leftovers) / sizeof(leftovers[0]));
+    if (leftover_count > 0) {
+        flock(lock_fd, LOCK_UN);
+        close(lock_fd);
+        printf("BFU_DEBIAN_ORPHANED_INSTANCE first_pid=%d\n", leftovers[0]);
+        return fail_message("orphaned_instance",
+                            "previous_processes_remain_in_the_delegated_cgroup_run_force_stop",
+                            89);
     }
 
     int ready_pipe[2];
@@ -4635,6 +4720,118 @@ static int run_stop(const char *root, const char *control_dir) {
     return fail_message("stop_timeout", "supervisor_did_not_release_lock", 99);
 }
 
+static int run_force_stop(const char *root, const char *control_dir) {
+    if (geteuid() != 0) {
+        return fail_message("not_root", "launcher_requires_euid_0", 125);
+    }
+    int result = validate_control_directory(control_dir);
+    if (result != 0) return result;
+    char lock_path[PATH_MAX];
+    int lock_fd = open_lock_file(control_dir, lock_path, sizeof(lock_path));
+    if (lock_fd < 0) return fail_errno("force_stop_open_lock", 126);
+
+    LauncherState state = {0};
+    bool state_read = read_state(control_dir, &state) == 0;
+    bool compatibility = state_read && strcmp(state.launch_mode, "compat") == 0;
+    bool supervisor_valid = state_read && validate_supervisor_identity(&state);
+    bool init_valid = state_read && (compatibility
+            ? validate_compat_service_identity(&state)
+            : validate_init_identity(&state));
+
+    if (flock(lock_fd, LOCK_EX | LOCK_NB) == 0) {
+        flock(lock_fd, LOCK_UN);
+        close(lock_fd);
+        pid_t orphan_init_pid = init_valid ? state.init_host_pid : 0;
+        if (init_valid) {
+            if (compatibility) {
+                signal_compat_service(orphan_init_pid, SIGKILL);
+            } else if (kill(orphan_init_pid, SIGKILL) != 0 && errno != ESRCH) {
+                return fail_errno("force_stop_orphan_init", 127);
+            }
+        }
+        size_t survivors = terminate_delegated_processes();
+        if (survivors > 0) {
+            // The recorded identity is deliberately left intact so the next
+            // start still reports an orphaned instance instead of failing
+            // later with a bare cgroup EBUSY.
+            return fail_message("force_stop_incomplete",
+                                "delegated_processes_survived_SIGKILL_reboot_required",
+                                134);
+        }
+        cleanup_delegated_cgroups(root, control_dir);
+        initialize_state(&state, "force-stopped");
+        (void) write_state(control_dir, &state);
+        printf("BFU_DEBIAN_FORCE_STOPPED supervisor_pid=0 init_host_pid=%d "
+               "orphan=%s\n", orphan_init_pid, init_valid ? "killed" : "none");
+        return 0;
+    }
+    if (errno != EWOULDBLOCK && errno != EAGAIN) {
+        close(lock_fd);
+        return fail_errno("force_stop_lock", 128);
+    }
+    if (!supervisor_valid) {
+        close(lock_fd);
+        return fail_message("force_stop_identity_invalid",
+                            "refusing_to_kill_unverified_supervisor", 129);
+    }
+
+    pid_t supervisor_pid = state.supervisor_pid;
+    pid_t init_pid = init_valid ? state.init_host_pid : 0;
+    if (getsid(supervisor_pid) != supervisor_pid
+            || getpgid(supervisor_pid) != supervisor_pid) {
+        close(lock_fd);
+        return fail_message("force_stop_session_invalid",
+                            "verified_supervisor_is_not_session_leader", 129);
+    }
+    if (init_valid) {
+        if (compatibility) {
+            signal_compat_service(init_pid, SIGKILL);
+        } else if (kill(init_pid, SIGKILL) != 0 && errno != ESRCH) {
+            close(lock_fd);
+            return fail_errno("force_stop_init", 130);
+        }
+    }
+    // supervisor_loop() creates a dedicated session before any helper or
+    // namespace child starts. Kill that verified process group so a force
+    // stop during early startup cannot leave an unrecorded helper orphaned.
+    if (kill(-supervisor_pid, SIGKILL) != 0 && errno != ESRCH) {
+        close(lock_fd);
+        return fail_errno("force_stop_supervisor_group", 131);
+    }
+
+    const int64_t deadline = monotonic_millis() + 10000;
+    while (monotonic_millis() < deadline) {
+        if (flock(lock_fd, LOCK_EX | LOCK_NB) == 0) {
+            flock(lock_fd, LOCK_UN);
+            close(lock_fd);
+            size_t survivors = terminate_delegated_processes();
+            if (survivors > 0) {
+                return fail_message("force_stop_incomplete",
+                                    "delegated_processes_survived_SIGKILL_reboot_required",
+                                    134);
+            }
+            cleanup_delegated_cgroups(root, control_dir);
+            initialize_state(&state, "force-stopped");
+            state.supervisor_pid = supervisor_pid;
+            state.init_host_pid = init_pid;
+            state.wait_status = SIGKILL;
+            (void) write_state(control_dir, &state);
+            printf("BFU_DEBIAN_FORCE_STOPPED supervisor_pid=%d init_host_pid=%d "
+                   "signal=SIGKILL lock_released=true\n",
+                   supervisor_pid, init_pid);
+            return 0;
+        }
+        if (errno != EWOULDBLOCK && errno != EAGAIN) {
+            close(lock_fd);
+            return fail_errno("force_stop_wait_lock", 132);
+        }
+        usleep(100000);
+    }
+    close(lock_fd);
+    return fail_message("force_stop_timeout",
+                        "verified_processes_killed_but_kernel_lock_not_released", 133);
+}
+
 static int run_restart(const char *root, const char *control_dir,
                        const char *log_path, CgroupPolicy cgroup_policy,
                        bool allow_fallback,
@@ -4657,13 +4854,14 @@ static void usage(const char *program) {
             "  %s status /data/local/debian CONTROL_DIR\n"
             "  %s health /data/local/debian CONTROL_DIR\n"
             "  %s stop /data/local/debian CONTROL_DIR\n"
+            "  %s force-stop /data/local/debian CONTROL_DIR\n"
             "  %s restart /data/local/debian CONTROL_DIR LIFECYCLE_LOG "
             "[auto|v2|v1] [strict|fallback] [off|direct|exclusive] [VID:PID,...|-]\n"
             "  %s codec-long-run /data/local/debian CONTROL_DIR "
             "start|stop|status|report\n"
             "  %s shutdown-test /data/local/debian CONTROL_DIR poweroff|reboot|shutdown\n",
             program, program, program, program, program, program, program, program,
-            program);
+            program, program);
 }
 
 int main(int argc, char **argv) {
@@ -4721,6 +4919,9 @@ int main(int argc, char **argv) {
     }
     if (argc == 4 && strcmp(argv[1], "stop") == 0) {
         return run_stop(argv[2], argv[3]);
+    }
+    if (argc == 4 && strcmp(argv[1], "force-stop") == 0) {
+        return run_force_stop(argv[2], argv[3]);
     }
     if (argc >= 5 && argc <= 9 && strcmp(argv[1], "restart") == 0) {
         CgroupPolicy policy;

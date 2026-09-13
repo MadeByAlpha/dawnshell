@@ -413,6 +413,92 @@ The managed cgroup driver should be `cgroupfs`.
 | `/dev/mqueue ... device or resource busy` | The kernel's private IPC path is incompatible. Enable the host-IPC wrapper and reapply policy. |
 | `failed to unshare remaining namespaces` | A dangerous namespace creation was blocked. Verify that the wrapper supplied host IPC. |
 | `resolv.conf: operation not permitted` | Container mount setup conflicts with kernel/SELinux policy. Preserve the daemon log instead of retrying repeatedly. |
+| `mount callback failed ... /dev/console: operation not permitted` | Docker selected the containerd image store, whose temporary snapshot initialization is incompatible with some Android `/data` filesystems or security policies. Current DawnShell builds automatically migrate an existing DawnShell-managed policy to the classic image store before the next Debian start. Restart Debian once, then pull the image again if it is not visible. Unmanaged `daemon.json` files are intentionally left for the administrator. |
+| Container creation randomly fails with `operation not permitted` on `/etc/hosts`, `/.dockerenv`, `/dev/console`, or the image entrypoint | Some Android kernels intermittently reject dockerd's writes through a freshly mounted `overlay2` layer. The same image starts fine on the next attempt, which makes it look random. Set **Container storage driver** to **vfs** on the Advanced page and press Apply. |
+
+The `vfs` driver copies each image layer in full instead of stacking them with
+overlayfs, so it avoids the kernel path that fails. Pulls are slower and use far
+more storage. Images and containers created under the other driver stay on disk
+and reappear when you switch back.
+
+### `mounting "mqueue" ... no such device`
+
+The kernel has no POSIX message queue filesystem, so a container with a private
+IPC namespace cannot create `/dev/mqueue`. Confirm it with
+`grep -w mqueue /proc/filesystems`; an empty result means the support is
+missing. This is distinct from `device or resource busy`, which means the
+filesystem exists but the mount conflicts.
+
+Docker omits that mount entirely when the container uses host IPC, so keeping
+**Docker host IPC compatibility** enabled and reapplying the policy is the fix.
+Verify that `command -v docker` resolves to `/usr/local/bin/docker`; calling
+`/usr/bin/docker` directly bypasses the managed wrapper. For a one-off run add
+`--ipc=host`, or `ipc: host` per service in Compose.
+
+### A container port accepts connections but never answers
+
+Android only lets a process reach the network when its UID belongs to the
+`AID_INET` group, GID 3003. Many images drop privileges to a non-root user, so
+the container accepts the TCP connection and acknowledges the request, then never
+transmits a reply. From the client this looks like a hang rather than a refusal.
+
+DawnShell's managed `docker` wrapper adds `--group-add 3003` to `run` and
+`create`, and to the `compose` override it generates. Recreate long-running
+containers once after applying the policy so they pick it up. Calling
+`/usr/bin/docker` directly bypasses the wrapper, so pass `--group-add 3003`
+yourself there.
+
+### A container has no network at all
+
+Under the default host-only policy the bridge driver is disabled, so a
+container that keeps Docker's default network cannot reach anything and logs
+`WARNING: IPv4 forwarding is disabled`. The wrapper therefore also adds
+`--network host` to `run` and `create`, and `network_mode: host` to the
+Compose override, unless the command or service already selects a network.
+
+Host networking discards `-p` published ports: the service listens on the
+Android port directly, so `-p 8080:80` still serves on port 80. Choose a
+bridge policy in the app if you need port mapping, or change the port inside
+the service configuration.
+
+Whether a bridge policy can work at all is reported after every apply, even
+while host-only is selected. Read `bridge_support` in the Docker policy status
+on the Advanced page:
+
+| Value | Meaning |
+| --- | --- |
+| `unavailable` | The kernel lacks the `addrtype` match, the `MASQUERADE` target, or working nftables. No bridge policy can succeed. |
+| `legacy`, `iptables-nft`, `native-nft` | A bridge policy would work through that backend. |
+
+A kernel reporting `unavailable` needs `CONFIG_NETFILTER_XT_MATCH_ADDRTYPE`
+and `CONFIG_IP_NF_TARGET_MASQUERADE` before Docker's bridge driver can start.
+See [Kernel requirements](kernel-requirements.md) for the full option list and
+what to do when a capability is missing.
+
+### Response headers arrive but the body never does
+
+Some Android Wi-Fi drivers silently drop zero-copy `sendfile()` transmissions.
+Loopback and VPN interfaces such as Tailscale are unaffected, which is why the
+same service can work over a tailnet address and stall over the LAN address. A
+packet capture on the Wi-Fi interface shows the request being acknowledged and no
+response segment on the wire.
+
+Disable `sendfile` in the service. For nginx, add `sendfile off;` to the
+`http`, `server`, or `location` block. Apache uses `EnableSendfile Off`.
+This costs a little CPU and needs no other change.
+
+If normal **Stop** ends with `supervisor_did_not_release_lock`, use
+**Force-stop stuck supervisor** on the Home page. It does not trust a PID number
+alone: it revalidates the process start time and executable inode before sending
+`SIGKILL` only to the recorded Debian init and supervisor. It never deletes the
+lock file. If the kernel still does not release the lock, the process may be in
+uninterruptible kernel sleep and Android must be rebooted.
+
+DawnShell explicitly sets `features.containerd-snapshotter=false` in its managed
+Docker configuration. Docker preserves data belonging to both image stores, but
+only the active store's images and containers are visible. Switching stores
+does not migrate or delete that data. See Docker's
+[containerd image store documentation](https://docs.docker.com/engine/storage/containerd/).
 
 Bridge modes can alter Android-global firewall, NAT, forwarding, and routes. If
 connectivity breaks, use the local screen or ADB to reapply host-only mode.
