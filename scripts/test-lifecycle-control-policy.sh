@@ -22,6 +22,15 @@ grep -Fq 'strcmp(argv[1], "force-stop")' "$launcher"
 grep -Fq 'refusing_to_kill_unverified_supervisor' "$launcher"
 grep -Fq 'verified_supervisor_is_not_session_leader' "$launcher"
 grep -Fq 'kill(-supervisor_pid, SIGKILL)' "$launcher"
+# A force stop clears the recorded identity, so a leftover instance has to be
+# discoverable from the delegated cgroup instead of from that record.
+grep -Fq 'collect_delegated_processes' "$launcher"
+grep -Fq 'terminate_delegated_processes' "$launcher"
+grep -Fq 'orphaned_instance' "$launcher"
+grep -Fq 'delegated_processes_survived_SIGKILL_reboot_required' "$launcher"
+# The init of a PID namespace must be signalled after its children so they are
+# never left without a reaper.
+grep -Fq 'if (index != lowest) (void) kill(pids[index], SIGKILL);' "$launcher"
 grep -Fq 'verified_processes_killed_but_kernel_lock_not_released' "$launcher"
 if grep -A110 -F 'static int run_force_stop' "$launcher" | grep -Fq 'unlink(lock_path)'; then
     echo "Force stop must never unlink an actively held lock" >&2

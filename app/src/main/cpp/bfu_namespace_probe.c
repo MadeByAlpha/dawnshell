@@ -4453,6 +4453,80 @@ static int run_codec_long_run(const char *root, const char *control_dir,
                                     operation, 20);
 }
 
+/* Android's root cgroup namespace exposes DawnShell's delegated subtree as
+   /dawnshell/..., so a surviving instance can be located from /proc without
+   trusting the recorded state. That matters because a force stop clears the
+   state, and a cleared record is exactly when the operator needs the leftover
+   to be found. Without this the next start fails deep inside cgroup setup
+   with a bare EBUSY instead of naming the real problem. */
+static bool cgroup_path_is_delegated(const char *path) {
+    size_t length = strlen(kCgroupChildName);
+    if (path[0] != '/') return false;
+    if (strncmp(path + 1, kCgroupChildName, length) != 0) return false;
+    char separator = path[1 + length];
+    return separator == '\0' || separator == '/';
+}
+
+static bool process_in_delegated_cgroup(pid_t pid) {
+    char path[PATH_MAX];
+    int count = snprintf(path, sizeof(path), "/proc/%d/cgroup", (int) pid);
+    if (count < 0 || (size_t) count >= sizeof(path)) return false;
+    int fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return false;
+    char contents[4096];
+    ssize_t length = read(fd, contents, sizeof(contents) - 1);
+    close(fd);
+    if (length <= 0) return false;
+    contents[length] = '\0';
+    char *save = NULL;
+    for (char *line = strtok_r(contents, "\n", &save); line != NULL;
+         line = strtok_r(NULL, "\n", &save)) {
+        const char *value = strrchr(line, ':');
+        if (value != NULL && cgroup_path_is_delegated(value + 1)) return true;
+    }
+    return false;
+}
+
+static size_t collect_delegated_processes(pid_t *pids, size_t capacity) {
+    DIR *directory = opendir("/proc");
+    if (directory == NULL) return 0;
+    size_t count = 0;
+    struct dirent *entry;
+    while (count < capacity && (entry = readdir(directory)) != NULL) {
+        char *end = NULL;
+        long value = strtol(entry->d_name, &end, 10);
+        if (end == NULL || *end != '\0' || value <= 1) continue;
+        pid_t pid = (pid_t) value;
+        if (pid == getpid()) continue;
+        if (process_in_delegated_cgroup(pid)) pids[count++] = pid;
+    }
+    closedir(directory);
+    return count;
+}
+
+/* Signals the delegated subtree children first. A PID namespace init that
+   still has children can refuse to exit, and killing it before them would
+   leave them without a reaper, so the lowest PID in the subtree, which is the
+   init, is always signalled last. */
+static size_t terminate_delegated_processes(void) {
+    pid_t pids[512];
+    for (int round = 0; round < 5; round++) {
+        size_t count = collect_delegated_processes(pids, 512);
+        if (count == 0) return 0;
+        size_t lowest = 0;
+        for (size_t index = 1; index < count; index++) {
+            if (pids[index] < pids[lowest]) lowest = index;
+        }
+        for (size_t index = 0; index < count; index++) {
+            if (index != lowest) (void) kill(pids[index], SIGKILL);
+        }
+        usleep(200000);
+        (void) kill(pids[lowest], SIGKILL);
+        usleep(300000);
+    }
+    return collect_delegated_processes(pids, 512);
+}
+
 static int run_start(const char *root, const char *control_dir,
                      const char *log_path, CgroupPolicy cgroup_policy,
                      bool allow_fallback,
@@ -4508,6 +4582,17 @@ static int run_start(const char *root, const char *control_dir,
                             strcmp(stale.launch_mode, "compat") == 0
                             ? "verified_compat_sshd_exists_without_supervisor"
                             : "verified_systemd_pid1_exists_without_supervisor", 89);
+    }
+    pid_t leftovers[4];
+    size_t leftover_count = collect_delegated_processes(leftovers,
+                                                        sizeof(leftovers) / sizeof(leftovers[0]));
+    if (leftover_count > 0) {
+        flock(lock_fd, LOCK_UN);
+        close(lock_fd);
+        printf("BFU_DEBIAN_ORPHANED_INSTANCE first_pid=%d\n", leftovers[0]);
+        return fail_message("orphaned_instance",
+                            "previous_processes_remain_in_the_delegated_cgroup_run_force_stop",
+                            89);
     }
 
     int ready_pipe[2];
@@ -4664,6 +4749,15 @@ static int run_force_stop(const char *root, const char *control_dir) {
                 return fail_errno("force_stop_orphan_init", 127);
             }
         }
+        size_t survivors = terminate_delegated_processes();
+        if (survivors > 0) {
+            // The recorded identity is deliberately left intact so the next
+            // start still reports an orphaned instance instead of failing
+            // later with a bare cgroup EBUSY.
+            return fail_message("force_stop_incomplete",
+                                "delegated_processes_survived_SIGKILL_reboot_required",
+                                134);
+        }
         cleanup_delegated_cgroups(root, control_dir);
         initialize_state(&state, "force-stopped");
         (void) write_state(control_dir, &state);
@@ -4710,6 +4804,12 @@ static int run_force_stop(const char *root, const char *control_dir) {
         if (flock(lock_fd, LOCK_EX | LOCK_NB) == 0) {
             flock(lock_fd, LOCK_UN);
             close(lock_fd);
+            size_t survivors = terminate_delegated_processes();
+            if (survivors > 0) {
+                return fail_message("force_stop_incomplete",
+                                    "delegated_processes_survived_SIGKILL_reboot_required",
+                                    134);
+            }
             cleanup_delegated_cgroups(root, control_dir);
             initialize_state(&state, "force-stopped");
             state.supervisor_pid = supervisor_pid;
