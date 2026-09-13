@@ -75,6 +75,7 @@ grep -Fq 'network_mode: host' "$policy_script"
 # host-only policy; otherwise the status cannot say whether host-only is a
 # choice or a kernel limitation.
 grep -Fq 'detect_bridge_support' "$policy_script"
+# shellcheck disable=SC2016 # Assert literal shell source, not this test's variables.
 grep -Fq 'bridge_support=$bridge_support' "$policy_script"
 grep -Fq 'checking whether this kernel could run a Docker bridge' "$policy_script"
 grep -Fq 'group_add:' "$policy_script"
@@ -137,6 +138,7 @@ grep -Fq 'android:id="@+id/docker_storage_vfs"' "$layout"
 grep -Fq '"storage-driver": "overlay2",' "$policy_script"
 grep -Fq '"storage-driver": "vfs",' "$policy_script"
 grep -Fq 'Docker storage driver must be overlay2 or vfs' "$policy_script"
+# shellcheck disable=SC2016 # Assert literal shell source, not this test's variables.
 grep -Fq 'storage_driver=$storage_driver' "$policy_script"
 grep -Fq 'android:id="@+id/switch_docker_host_ipc_compatibility"' "$layout"
 grep -Fq 'android:id="@+id/cgroup_policy_group"' "$layout"
