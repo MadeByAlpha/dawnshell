@@ -472,6 +472,8 @@ on the Advanced page:
 
 A kernel reporting `unavailable` needs `CONFIG_NETFILTER_XT_MATCH_ADDRTYPE`
 and `CONFIG_IP_NF_TARGET_MASQUERADE` before Docker's bridge driver can start.
+See [Kernel requirements](kernel-requirements.md) for the full option list and
+what to do when a capability is missing.
 
 ### Response headers arrive but the body never does
 

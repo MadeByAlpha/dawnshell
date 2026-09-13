@@ -562,6 +562,8 @@ bridge 정책이 애초에 가능한 기기인지는 호스트 전용을 쓰는 
 
 `unavailable`이 나오는 커널에서 bridge를 쓰려면 `CONFIG_NETFILTER_XT_MATCH_ADDRTYPE`와
 `CONFIG_IP_NF_TARGET_MASQUERADE`가 켜진 커널이 필요합니다.
+전체 옵션 목록과 지원하지 않을 때의 대처는 [커널 요구사항](kernel-requirements.ko.md)에
+정리해 두었습니다.
 
 ### 응답 헤더는 오는데 본문이 오지 않음
 

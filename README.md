@@ -146,6 +146,7 @@ key is not a production signing identity.
 - [User manual](docs/user-guide.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Glossary](docs/glossary.md)
+- [Kernel requirements](docs/kernel-requirements.md)
 - [FFmpeg hardware codec guide](docs/ffmpeg-hardware-codec.md)
 - [FFmpeg MediaCodec syntax compatibility](docs/ffmpeg-mediacodec-compatibility.md)
 - [`gsmi` accelerator status monitor](docs/gpu-status-tool.md)
