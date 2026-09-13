@@ -461,6 +461,18 @@ Android port directly, so `-p 8080:80` still serves on port 80. Choose a
 bridge policy in the app if you need port mapping, or change the port inside
 the service configuration.
 
+Whether a bridge policy can work at all is reported after every apply, even
+while host-only is selected. Read `bridge_support` in the Docker policy status
+on the Advanced page:
+
+| Value | Meaning |
+| --- | --- |
+| `unavailable` | The kernel lacks the `addrtype` match, the `MASQUERADE` target, or working nftables. No bridge policy can succeed. |
+| `legacy`, `iptables-nft`, `native-nft` | A bridge policy would work through that backend. |
+
+A kernel reporting `unavailable` needs `CONFIG_NETFILTER_XT_MATCH_ADDRTYPE`
+and `CONFIG_IP_NF_TARGET_MASQUERADE` before Docker's bridge driver can start.
+
 ### Response headers arrive but the body never does
 
 Some Android Wi-Fi drivers silently drop zero-copy `sendfile()` transmissions.

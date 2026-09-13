@@ -552,6 +552,17 @@ DawnShell의 관리형 `docker` 래퍼가 `run`과 `create`, 그리고 자동 �
 때문에 `-p 8080:80`을 줘도 80번에서 서비스됩니다. 포트 매핑이 꼭 필요하면 앱에서
 bridge 정책을 고르거나, 서비스 설정에서 포트를 바꾸세요.
 
+bridge 정책이 애초에 가능한 기기인지는 호스트 전용을 쓰는 중에도 매번 적용할 때마다
+보고합니다. 고급 페이지의 Docker 정책 상태에서 `bridge_support`를 보세요.
+
+| 값 | 의미 |
+| --- | --- |
+| `unavailable` | 커널에 `addrtype` 매치, `MASQUERADE` 타깃, 또는 동작하는 nftables가 없습니다. 어떤 bridge 정책도 성공할 수 없습니다. |
+| `legacy`, `iptables-nft`, `native-nft` | 해당 백엔드로 bridge 정책이 동작합니다. |
+
+`unavailable`이 나오는 커널에서 bridge를 쓰려면 `CONFIG_NETFILTER_XT_MATCH_ADDRTYPE`와
+`CONFIG_IP_NF_TARGET_MASQUERADE`가 켜진 커널이 필요합니다.
+
 ### 응답 헤더는 오는데 본문이 오지 않음
 
 일부 Android Wi-Fi 드라이버는 zero-copy `sendfile()` 전송을 조용히 버립니다.

@@ -482,10 +482,37 @@ EOF_NATIVE_PROBE
     return "$result"
 }
 
+# The capability checks are read-only, so they can run even when the bridge is
+# deliberately disabled. Reporting the result makes it obvious whether the
+# host-only fallback is a DawnShell policy choice or a kernel limitation.
+detect_bridge_support() {
+    if probe_native_nft; then
+        bridge_support=native-nft
+        return
+    fi
+    if probe_iptables_backend /usr/sbin/iptables-nft; then
+        bridge_support=iptables-nft
+        return
+    fi
+    if probe_iptables_backend /usr/sbin/iptables-legacy; then
+        bridge_support=legacy
+        return
+    fi
+    bridge_support=unavailable
+}
+
 backend=none
+bridge_support=unavailable
 case "$policy" in
     host)
-        echo "POLICY: safe host-network-only mode; no firewall backend probe needed"
+        echo "POLICY: safe host-network-only mode"
+        echo "PROBE: checking whether this kernel could run a Docker bridge"
+        detect_bridge_support
+        if [ "$bridge_support" = unavailable ]; then
+            echo "PROBE: bridge unavailable; this kernel is missing Docker's required addrtype, masquerade, or conntrack capabilities"
+        else
+            echo "PROBE: bridge would be available through $bridge_support if the policy is changed"
+        fi
         ;;
     auto)
         echo "PROBE: trying native Docker nftables first"
@@ -547,6 +574,9 @@ case "$backend" in
 esac
 [ "$backend" = none ] || \
     echo "WARNING: bridge mode can mutate Android-global firewall, NAT, routes, and forwarding"
+# Any policy other than host already proved its backend, so reuse that result
+# instead of probing the kernel a second time.
+[ "$policy" = host ] || bridge_support=$backend
 echo "POLICY: disabling Docker's containerd snapshotter for Android /data compatibility"
 echo "WARNING: switching image stores preserves existing data but images and containers from the other store are hidden until it is re-enabled"
 
@@ -637,6 +667,7 @@ containerd_snapshotter=false
 host_ipc_compatibility=$host_ipc_compatibility
 docker_cli_wrapper=/usr/local/bin/docker
 mqueue_filesystem=$mqueue_supported
+bridge_support=$bridge_support
 bridge_mutates_android_global_netfilter=$([ "$backend" = none ] && echo false || echo true)
 configured_epoch=$(date +%s)
 EOF_RECORD
@@ -645,7 +676,7 @@ chmod 0644 "${policy_record}.new"
 mv "${policy_record}.new" "$policy_record"
 sync
 
-echo "DOCKER_POLICY_SUCCEEDED: requested=$policy resolved_backend=$backend cgroup_driver=cgroupfs image_store=classic containerd_snapshotter=false host_ipc_compatibility=$host_ipc_compatibility storage_driver=$storage_driver mqueue_filesystem=$mqueue_supported"
+echo "DOCKER_POLICY_SUCCEEDED: requested=$policy resolved_backend=$backend bridge_support=$bridge_support cgroup_driver=cgroupfs image_store=classic containerd_snapshotter=false host_ipc_compatibility=$host_ipc_compatibility storage_driver=$storage_driver mqueue_filesystem=$mqueue_supported"
 if [ "$backend" = none ]; then
     echo "USAGE: start containers with --network host"
 fi

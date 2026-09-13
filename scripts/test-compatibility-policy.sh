@@ -71,6 +71,12 @@ grep -Fq 'injected+=(--group-add 3003)' "$policy_script"
 grep -Fq 'injected+=(--network host)' "$policy_script"
 grep -Fq 'dawnshell_host_network' "$policy_script"
 grep -Fq 'network_mode: host' "$policy_script"
+# The bridge capability probe is read-only, so it must run even under the
+# host-only policy; otherwise the status cannot say whether host-only is a
+# choice or a kernel limitation.
+grep -Fq 'detect_bridge_support' "$policy_script"
+grep -Fq 'bridge_support=$bridge_support' "$policy_script"
+grep -Fq 'checking whether this kernel could run a Docker bridge' "$policy_script"
 grep -Fq 'group_add:' "$policy_script"
 # A kernel without POSIX message queues must be reported, not silently hit at
 # container creation as "mounting mqueue ... no such device".
