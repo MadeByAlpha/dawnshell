@@ -53,24 +53,31 @@ assert_arguments() {
 }
 
 run_wrapper run --rm hello-world
-assert_arguments run --ipc=host --group-add 3003 --rm hello-world
+assert_arguments run --ipc=host --group-add 3003 --network host --rm hello-world
 
 run_wrapper create --ipc=private alpine true
-assert_arguments create --group-add 3003 --ipc=private alpine true
+assert_arguments create --group-add 3003 --network host --ipc=private alpine true
 
 run_wrapper container run --name demo alpine true
-assert_arguments container run --ipc=host --group-add 3003 --name demo alpine true
+assert_arguments container run --ipc=host --group-add 3003 --network host --name demo alpine true
 
 # An explicit Android AID_INET group must not be duplicated, in either form.
 run_wrapper run --group-add 3003 alpine true
-assert_arguments run --ipc=host --group-add 3003 alpine true
+assert_arguments run --ipc=host --network host --group-add 3003 alpine true
 
 run_wrapper run --group-add=3003 alpine true
-assert_arguments run --ipc=host --group-add=3003 alpine true
+assert_arguments run --ipc=host --network host --group-add=3003 alpine true
 
 # A different supplementary group must still receive the Android one.
 run_wrapper run --group-add video alpine true
-assert_arguments run --ipc=host --group-add 3003 --group-add video alpine true
+assert_arguments run --ipc=host --group-add 3003 --network host --group-add video alpine true
+
+# An explicit network selection must win, in either spelling.
+run_wrapper run --network mynet alpine true
+assert_arguments run --ipc=host --group-add 3003 --network mynet alpine true
+
+run_wrapper run --net=none alpine true
+assert_arguments run --ipc=host --group-add 3003 --net=none alpine true
 
 run_wrapper info
 assert_arguments info
@@ -80,7 +87,14 @@ assert_arguments info
 printf 'dawnshell_host_ipc=false\n' > "$temporary_dir/wrapper.conf"
 export DAWNSHELL_WRAPPER_CONF="$temporary_dir/wrapper.conf"
 run_wrapper run --rm hello-world
-assert_arguments run --group-add 3003 --rm hello-world
+assert_arguments run --group-add 3003 --network host --rm hello-world
+unset DAWNSHELL_WRAPPER_CONF
+
+# A bridge policy leaves networking to Docker, so nothing may be forced.
+printf 'dawnshell_host_network=false\n' > "$temporary_dir/wrapper.conf"
+export DAWNSHELL_WRAPPER_CONF="$temporary_dir/wrapper.conf"
+run_wrapper run --rm hello-world
+assert_arguments run --ipc=host --group-add 3003 --rm hello-world
 unset DAWNSHELL_WRAPPER_CONF
 
 # Compose declares IPC in YAML, so the wrapper must inject an override file

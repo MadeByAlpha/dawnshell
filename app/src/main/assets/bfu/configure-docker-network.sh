@@ -224,7 +224,17 @@ configure_host_ipc_wrapper() {
     # read from this companion file instead. The Android network group is
     # always injected because without it a container that drops to a non-root
     # user can accept connections but never transmit a reply.
-    printf 'dawnshell_host_ipc=%s\n' "$host_ipc_compatibility" > "$docker_wrapper_conf"
+    # Under the host-only policy the bridge driver is disabled, so a container
+    # that keeps Docker's default network has no working connectivity at all.
+    # The wrapper therefore supplies host networking unless the caller asked
+    # for a specific network.
+    if [ "$backend" = none ]; then
+        host_network=true
+    else
+        host_network=false
+    fi
+    printf 'dawnshell_host_ipc=%s\ndawnshell_host_network=%s\n' \
+        "$host_ipc_compatibility" "$host_network" > "$docker_wrapper_conf"
     chown 0:0 "$docker_wrapper_conf"
     chmod 0644 "$docker_wrapper_conf"
     wrapper_temporary="${docker_wrapper}.dawnshell.$$"
@@ -233,6 +243,7 @@ configure_host_ipc_wrapper() {
 set -e
 
 dawnshell_host_ipc=true
+dawnshell_host_network=true
 dawnshell_wrapper_conf="${DAWNSHELL_WRAPPER_CONF:-/etc/dawnshell/docker-wrapper.conf}"
 if [ -r "$dawnshell_wrapper_conf" ]; then
     . "$dawnshell_wrapper_conf"
@@ -313,24 +324,32 @@ if (( ${#arguments[@]} > 0 )); then
                     # Compose merges later files over earlier ones, so a
                     # service that already declares `ipc:` must be skipped to
                     # keep the user's own value.
-                    declared="$("$real_docker" compose "${compose_options[@]}" \
+                    declared_ipc="$("$real_docker" compose "${compose_options[@]}" \
                         config 2>/dev/null \
                         | awk '/^  [A-Za-z0-9._-]+:$/ { gsub(/[ :]/, "", $0); service = $0 }
                                /^    ipc:/ { print service }')"
+                    declared_network="$("$real_docker" compose "${compose_options[@]}" \
+                        config 2>/dev/null \
+                        | awk '/^  [A-Za-z0-9._-]+:$/ { gsub(/[ :]/, "", $0); service = $0 }
+                               /^    (network_mode|networks):/ { print service }')"
                     override="$(mktemp /tmp/dawnshell-compose-ipc.XXXXXX.yml)"
                     trap 'rm -f "$override"' EXIT
                     {
                         printf 'services:\n'
                         while IFS= read -r service; do
                             [ -n "$service" ] || continue
-                            if printf '%s\n' "$declared" | grep -Fxq "$service"; then
-                                continue
+                            printf '  %s:\n' "$service"
+                            if [ "$dawnshell_host_ipc" = true ] \
+                                    && ! printf '%s\n' "$declared_ipc" \
+                                        | grep -Fxq "$service"; then
+                                printf '    ipc: host\n'
                             fi
-                            if [ "$dawnshell_host_ipc" = true ]; then
-                                printf '  %s:\n    ipc: host\n    group_add:\n      - "3003"\n' "$service"
-                            else
-                                printf '  %s:\n    group_add:\n      - "3003"\n' "$service"
+                            if [ "$dawnshell_host_network" = true ] \
+                                    && ! printf '%s\n' "$declared_network" \
+                                        | grep -Fxq "$service"; then
+                                printf '    network_mode: host\n'
                             fi
+                            printf '    group_add:\n      - "3003"\n'
                         done <<< "$services"
                     } > "$override"
                     # Compose keeps its own project discovery, so only the
@@ -348,11 +367,13 @@ fi
 if (( command_index >= 0 )); then
     explicit_ipc=false
     explicit_inet_group=false
+    explicit_network=false
     previous=""
     for argument in "${arguments[@]}"; do
         case "$argument" in
             --ipc|--ipc=*) explicit_ipc=true ;;
             --group-add=3003) explicit_inet_group=true ;;
+            --network|--network=*|--net|--net=*) explicit_network=true ;;
         esac
         if [ "$previous" = --group-add ] && [ "$argument" = 3003 ]; then
             explicit_inet_group=true
@@ -368,6 +389,9 @@ if (( command_index >= 0 )); then
     # connection but never transmit a reply. The supplementary group restores
     # network access without granting root inside the container.
     [ "$explicit_inet_group" = true ] || injected+=(--group-add 3003)
+    if [ "$dawnshell_host_network" = true ] && [ "$explicit_network" = false ]; then
+        injected+=(--network host)
+    fi
     if (( ${#injected[@]} > 0 )); then
         rewritten=("${arguments[@]:0:$((command_index + 1))}")
         rewritten+=("${injected[@]}")
@@ -391,6 +415,10 @@ EOF_DOCKER_WRAPPER
     else
         echo "POLICY: Docker run/create wrapper adds --group-add 3003 (Android AID_INET) only"
         echo "WARNING: without host IPC a container that creates its own IPC namespace can panic or fail to start on affected kernels"
+    fi
+    if [ "$host_network" = true ]; then
+        echo "POLICY: Docker run/create wrapper adds --network host because the bridge driver is disabled"
+        echo "WARNING: host networking discards -p published ports; a container listens on the Android port directly"
     fi
 }
 

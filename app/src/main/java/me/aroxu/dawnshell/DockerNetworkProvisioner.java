@@ -27,7 +27,7 @@ final class DockerNetworkProvisioner {
     private static final String REVISION_FILE = "docker-network-policy.revision";
     // Increment whenever an already-managed rootfs must receive a new
     // compatibility setting without requiring the user to toggle a setting.
-    private static final int MANAGED_CONFIGURATION_REVISION = 5;
+    private static final int MANAGED_CONFIGURATION_REVISION = 6;
     private static final int MAX_TAIL_BYTES = 48 * 1024;
     private static final Object FILE_LOCK = new Object();
 

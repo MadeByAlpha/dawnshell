@@ -540,6 +540,18 @@ DawnShell의 관리형 `docker` 래퍼가 `run`과 `create`, 그리고 자동 �
 컨테이너는 한 번 다시 만들어야 반영됩니다. `/usr/bin/docker`를 직접 부르면 래퍼를
 건너뛰므로 그때는 직접 `--group-add 3003`을 붙이세요.
 
+### 컨테이너에 네트워크가 아예 없음
+
+기본값인 호스트 전용 정책에서는 bridge 드라이버가 꺼져 있어서, Docker 기본 네트워크를
+그대로 쓰는 컨테이너는 아무 곳에도 닿지 못하고 `WARNING: IPv4 forwarding is disabled`만
+남깁니다. 그래서 래퍼가 `run`과 `create`에 `--network host`를, Compose override에
+`network_mode: host`를 함께 넣습니다. 명령이나 서비스가 네트워크를 이미 지정했다면
+건드리지 않습니다.
+
+호스트 네트워크는 `-p` 포트 매핑을 무시합니다. 서비스가 Android 포트에 직접 붙기
+때문에 `-p 8080:80`을 줘도 80번에서 서비스됩니다. 포트 매핑이 꼭 필요하면 앱에서
+bridge 정책을 고르거나, 서비스 설정에서 포트를 바꾸세요.
+
 ### 응답 헤더는 오는데 본문이 오지 않음
 
 일부 Android Wi-Fi 드라이버는 zero-copy `sendfile()` 전송을 조용히 버립니다.

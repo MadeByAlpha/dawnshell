@@ -448,6 +448,19 @@ containers once after applying the policy so they pick it up. Calling
 `/usr/bin/docker` directly bypasses the wrapper, so pass `--group-add 3003`
 yourself there.
 
+### A container has no network at all
+
+Under the default host-only policy the bridge driver is disabled, so a
+container that keeps Docker's default network cannot reach anything and logs
+`WARNING: IPv4 forwarding is disabled`. The wrapper therefore also adds
+`--network host` to `run` and `create`, and `network_mode: host` to the
+Compose override, unless the command or service already selects a network.
+
+Host networking discards `-p` published ports: the service listens on the
+Android port directly, so `-p 8080:80` still serves on port 80. Choose a
+bridge policy in the app if you need port mapping, or change the port inside
+the service configuration.
+
 ### Response headers arrive but the body never does
 
 Some Android Wi-Fi drivers silently drop zero-copy `sendfile()` transmissions.

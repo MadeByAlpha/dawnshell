@@ -66,6 +66,11 @@ grep -Fq 'host_ipc_compatibility=$host_ipc_compatibility' "$policy_script"
 grep -Fq 'injected+=(--ipc=host)' "$policy_script"
 # Android drops outbound traffic from container UIDs without AID_INET.
 grep -Fq 'injected+=(--group-add 3003)' "$policy_script"
+# The bridge driver is off under the host-only policy, so a container that
+# keeps Docker's default network would have no connectivity at all.
+grep -Fq 'injected+=(--network host)' "$policy_script"
+grep -Fq 'dawnshell_host_network' "$policy_script"
+grep -Fq 'network_mode: host' "$policy_script"
 grep -Fq 'group_add:' "$policy_script"
 # A kernel without POSIX message queues must be reported, not silently hit at
 # container creation as "mounting mqueue ... no such device".
