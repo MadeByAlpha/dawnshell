@@ -8,7 +8,7 @@
 ## 필요한 도구
 
 - JDK 17
-- Android SDK Platform 34와 Build Tools 34.0.0
+- Android SDK Platform 36과 Build Tools 34.0.0
 - Android NDK `29.0.14206865`
 - Git과 Bash
 - Python 3(문서 링크와 언어 쌍 검사)

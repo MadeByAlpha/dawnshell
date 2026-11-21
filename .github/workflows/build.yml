@@ -66,7 +66,7 @@ jobs:
           # status-bearing final command.
           set +o pipefail
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            "platforms;android-34" \
+            "platforms;android-36" \
             "build-tools;34.0.0" \
             "ndk;$ANDROID_NDK_VERSION" >/dev/null
           set -o pipefail

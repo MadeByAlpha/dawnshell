@@ -8,7 +8,7 @@ a complete release distribution.
 ## Requirements
 
 - JDK 17
-- Android SDK Platform 34 and Build Tools 34.0.0
+- Android SDK Platform 36 and Build Tools 34.0.0
 - Android NDK `29.0.14206865`
 - Git and Bash
 - Python 3 for documentation validation
