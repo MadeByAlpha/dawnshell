@@ -1,44 +1,46 @@
-# DawnShell 작업 규칙
+# DawnShell Working Rules
 
-## 브랜치
+## Branches
 
-- 모든 신규 작업, 버그 수정, 문서 변경은 `dev` 브랜치에서 진행한다.
-- `main`에서 직접 작업하거나 `main`으로 직접 푸시하지 않는다.
-- `dev`를 기준으로 커밋하고 검증한다.
-- `main` 병합은 새 릴리즈를 만들 때만 수행한다. 일반 기능 개발, 버그 수정,
-  문서 변경 또는 CI 수정만으로는 `main`에 병합하지 않는다.
-- 릴리즈 워크플로가 `main` push 또는 버전 태그를 대상으로 하므로, 릴리즈가 목적이 아닌 작업은 `main`에 직접 반영하지 않는다.
+- Do all new work, bug fixes, and documentation changes on the `dev` or `feat/<feature-name>` branch.
+- Do not work on `main` directly or push directly to `main`.
+- Commit and verify against `dev`.
+- Merge into `main` only when creating a new release. Regular feature development, bug fixes,
+  documentation changes, or CI fixes alone must not be merged into `main`.
+- The release workflow targets pushes to `main` or version tags, so work that is not a release must not
+  be applied to `main` directly.
 
-## 작업 시작
+## Starting Work
 
 ```sh
 git switch dev
 git pull --ff-only origin dev
 ```
 
-`dev`가 아직 없으면 저장소의 최신 `main`에서 한 번만 만든다.
+If `dev` does not exist yet, create it once from the latest `main` of the repository.
 
 ```sh
 git switch -c dev main
 git push -u origin dev
 ```
 
-## 변경 및 검증
+## Changes and Verification
 
-- 기존 사용자 변경사항과 작업 중인 변경사항을 보존한다.
-- 의미 있는 단위로 커밋하고, 커밋 메시지는 `type: description` 형식을 사용한다.
-- 코드 변경에 맞는 테스트와 문서 검사를 실행한다.
-- 실기기 검증이 필요한 경우 테스트하지 않은 상태를 성공으로 보고하지 않는다.
-- 사용자가 명시하지 않은 remote push, 릴리즈 생성, 태그 이동은 수행하지 않는다.
+- Preserve existing user changes and work-in-progress changes.
+- Commit in meaningful units, and use the `type: description` format for commit messages.
+- Run the tests and documentation checks that match the code changes.
+- When verification on a real device is required, do not report the untested state as a success.
+- Do not push to a remote, create a release, or move a tag unless the user explicitly asks for it.
 
-## 릴리즈
+## Releases
 
-- 릴리즈를 만들 때도 먼저 `dev`에서 빌드와 검증을 완료한다.
-- 정식 릴리즈 반영은 `dev`에서 검증을 끝낸 뒤 `main`으로 병합하고 버전 태그를
-  만드는 절차로 진행한다. 이 절차는 새 릴리즈 작업일 때만 수행한다.
-- 기존 GitHub Release와 자산을 덮어쓰지 않는다.
+- Even when creating a release, finish the build and verification on `dev` first.
+- An official release is made by merging `dev` into `main` after verification is complete and then
+  creating a version tag. Follow this procedure only for new release work.
+- Do not overwrite existing GitHub Releases and their assets.
 
-## 문서
+## Documentation
 
-- 사용자에게 영향을 주는 동작 변경은 관련 영문·국문 문서에 함께 기록한다.
-- 저장소 구조, 빌드, 설치, 호환성 및 보안 동작을 변경하면 README와 관련 `docs/` 문서를 갱신한다.
+- Record user-facing behavior changes in both the relevant English and Korean documents.
+- When changing repository structure, build, installation, compatibility, or security behavior, update the
+  README and the relevant `docs/` documents.
