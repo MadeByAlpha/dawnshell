@@ -6,9 +6,7 @@ import android.os.SystemClock;
 import android.os.UserManager;
 import android.util.Log;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -47,7 +45,7 @@ final class DebianLauncher {
             return "health_attempts=" + attempts
                     + " health_exit=" + result.exitCode
                     + " health_timeout=" + result.timedOut
-                    + " health_output=" + result.output;
+                    + " health_output=" + BfuSu.sanitize(result.output);
         }
     }
 
@@ -58,9 +56,8 @@ final class DebianLauncher {
         String command = BfuSu.shellQuote(layout.namespaceProbeBinary.getAbsolutePath())
                 + " status " + BfuSu.shellQuote(BfuRootfsProbe.ROOTFS_PATH)
                 + " " + BfuSu.shellQuote(layout.run.getAbsolutePath());
-        BfuSu.Result result = BfuSu.run(command, 12_000L);
-        return result.exitedSuccessfully()
-                && result.output.contains("BFU_DEBIAN_RUNNING");
+        BfuSu.Result result = BfuSu.runRaw(command, 12_000L);
+        return result.exitedSuccessfully() && NativeOutput.has(result.output, "running");
     }
 
     static boolean run(Context context, BfuRuntime.Layout layout, Operation operation,
@@ -85,11 +82,11 @@ final class DebianLauncher {
             timeoutMs = 12_000L;
         }
 
-        BfuSu.Result result = BfuSu.run(command, timeoutMs);
+        BfuSu.Result result = BfuSu.runRaw(command, timeoutMs);
         String summary = "command=" + result.command
                 + " exit=" + result.exitCode
                 + " timeout=" + result.timedOut
-                + " output=" + result.output;
+                + " output=" + BfuSu.sanitize(result.output);
         appendLog(layout.lifecycleLog,
                 "ANDROID_RESULT operation=" + operation.name() + " " + summary);
         boolean successful = result.exitedSuccessfully();
@@ -99,10 +96,10 @@ final class DebianLauncher {
             health = checkHealth(layout, true);
             successful = health.successful;
         } else if (successful && operation == Operation.STATUS) {
-            if (result.output.contains("BFU_DEBIAN_RUNNING")) {
+            if (NativeOutput.has(result.output, "running")) {
                 health = checkHealth(layout, false);
                 successful = health.successful;
-            } else if (!result.output.contains("BFU_DEBIAN_STOPPED")) {
+            } else if (!NativeOutput.has(result.output, "stopped")) {
                 successful = false;
                 appendLog(layout.lifecycleLog,
                         "ANDROID_HEALTH skipped=state_not_running_or_stopped");
@@ -115,7 +112,9 @@ final class DebianLauncher {
                 + " user_unlocked_before=" + userUnlockedBefore
                 + " user_unlocked_after=" + userUnlockedAfter
                 + " " + summary;
-        writeStatus(context, (successful ? "SUCCEEDED " : "FAILED ") + summary);
+        String events = health == null ? result.output : result.output + "\n" + health.result.output;
+        StatusStore.write(statusFile(context), (successful ? "SUCCEEDED " : "FAILED ") + summary,
+                NativeOutput.detail(events));
         if (successful) {
             Log.i(TAG, "Debian lifecycle " + summary);
         } else {
@@ -161,21 +160,9 @@ final class DebianLauncher {
         BfuSu.Result result;
         do {
             attempts++;
-            result = BfuSu.run(command, HEALTH_COMMAND_TIMEOUT_MS);
-            boolean compatibility = result.output.contains("mode=compat");
-            boolean successful = result.exitedSuccessfully()
-                    && result.output.contains("BFU_DEBIAN_HEALTH")
-                    && result.output.contains("listen_22=true")
-                    && (compatibility
-                    ? result.output.contains("compat_ready=true")
-                    : result.output.contains("system_state=running")
-                    && result.output.contains("dbus_service=active")
-                    && result.output.contains("dbus_bus=ok")
-                    && result.output.contains("ssh_service=active")
-                    && result.output.contains("boot_proof_service=active")
-                    && result.output.contains("boot_proof_marker=present")
-                    && result.output.contains("target_state=active")
-                    && result.output.contains("cgroup_delegation=delegated"));
+            result = BfuSu.runRaw(command, HEALTH_COMMAND_TIMEOUT_MS);
+            Health health = NativeOutput.health(result.output);
+            boolean successful = result.exitedSuccessfully() && health != null && health.getHealthy();
             appendLog(layout.lifecycleLog,
                     "ANDROID_HEALTH attempt=" + attempts
                             + " exit=" + result.exitCode
@@ -190,20 +177,11 @@ final class DebianLauncher {
     }
 
     static String readStatus(Context context) throws IOException {
-        Context deContext = BfuPreferences.deviceProtectedContext(context);
-        File file = new File(deContext.getFilesDir(), STATUS_FILE);
-        if (!file.isFile()) return "";
-        try (FileInputStream input = new FileInputStream(file);
-             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-            byte[] buffer = new byte[512];
-            int count;
-            while (output.size() < 4096
-                    && (count = input.read(buffer, 0,
-                    Math.min(buffer.length, 4096 - output.size()))) >= 0) {
-                output.write(buffer, 0, count);
-            }
-            return new String(output.toByteArray(), StandardCharsets.UTF_8).trim();
-        }
+        return StatusStore.readText(statusFile(context));
+    }
+
+    private static File statusFile(Context context) {
+        return new File(BfuPreferences.deviceProtectedContext(context).getFilesDir(), STATUS_FILE);
     }
 
     static String readLogTail(Context context) throws IOException {
@@ -254,24 +232,7 @@ final class DebianLauncher {
     }
 
     private static void writeStatus(Context context, String value) throws IOException {
-        Context deContext = BfuPreferences.deviceProtectedContext(context);
-        File destination = new File(deContext.getFilesDir(), STATUS_FILE);
-        File temporary = new File(deContext.getFilesDir(), STATUS_FILE + ".new");
-        String contents = System.currentTimeMillis() + " " + value + "\n";
-        synchronized (FILE_LOCK) {
-            try (FileOutputStream output = new FileOutputStream(temporary, false)) {
-                output.write(contents.getBytes(StandardCharsets.UTF_8));
-                output.getFD().sync();
-            }
-            setOwnerOnly(temporary);
-            if (destination.exists() && !destination.delete()) {
-                throw new IOException("cannot replace lifecycle status");
-            }
-            if (!temporary.renameTo(destination)) {
-                throw new IOException("cannot publish lifecycle status");
-            }
-            setOwnerOnly(destination);
-        }
+        StatusStore.write(statusFile(context), value);
     }
 
     private static String utcTimestamp() {

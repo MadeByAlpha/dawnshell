@@ -143,20 +143,11 @@ final class DockerNetworkProvisioner {
     }
 
     static String readStatus(Context context) throws IOException {
-        Context deContext = BfuPreferences.deviceProtectedContext(context);
-        File file = new File(deContext.getFilesDir(), STATUS_FILE);
-        if (!file.isFile()) return "";
-        try (FileInputStream input = new FileInputStream(file);
-             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-            byte[] buffer = new byte[512];
-            int count;
-            while (output.size() < 4096
-                    && (count = input.read(buffer, 0,
-                    Math.min(buffer.length, 4096 - output.size()))) >= 0) {
-                output.write(buffer, 0, count);
-            }
-            return new String(output.toByteArray(), StandardCharsets.UTF_8).trim();
-        }
+        return StatusStore.readText(statusFile(context));
+    }
+
+    private static File statusFile(Context context) {
+        return new File(BfuPreferences.deviceProtectedContext(context).getFilesDir(), STATUS_FILE);
     }
 
     /**
@@ -171,8 +162,8 @@ final class DockerNetworkProvisioner {
             if (revision > 0) {
                 return revision < MANAGED_CONFIGURATION_REVISION;
             }
-            String status = readStatus(context);
-            if (!status.contains(" SUCCEEDED ")) return false;
+            OperationStatus status = StatusStore.read(statusFile(context));
+            if (status == null || status.getState() != OperationState.SUCCEEDED) return false;
             // Successful policy state from builds predating revision files.
             // Persist the baseline before attempting the migration so a
             // failed/interrupted attempt is retried on the next safe start.
@@ -234,23 +225,7 @@ final class DockerNetworkProvisioner {
     }
 
     private static void writeStatus(Context deContext, String status) throws IOException {
-        File destination = new File(deContext.getFilesDir(), STATUS_FILE);
-        File temporary = new File(deContext.getFilesDir(), STATUS_FILE + ".new");
-        String contents = System.currentTimeMillis() + " " + status + "\n";
-        synchronized (FILE_LOCK) {
-            try (FileOutputStream output = new FileOutputStream(temporary, false)) {
-                output.write(contents.getBytes(StandardCharsets.UTF_8));
-                output.getFD().sync();
-            }
-            setOwnerOnly(temporary);
-            if (destination.exists() && !destination.delete()) {
-                throw new IOException("cannot replace Docker policy status");
-            }
-            if (!temporary.renameTo(destination)) {
-                throw new IOException("cannot publish Docker policy status");
-            }
-            setOwnerOnly(destination);
-        }
+        StatusStore.write(new File(deContext.getFilesDir(), STATUS_FILE), status);
     }
 
     private static int readManagedRevision(Context deContext) throws IOException {

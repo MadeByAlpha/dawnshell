@@ -2,12 +2,8 @@ package me.aroxu.dawnshell;
 
 import android.content.Context;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 /** Controls the fixed, allow-listed codec soak-test unit inside Debian PID 1. */
@@ -37,20 +33,8 @@ final class HardwareCodecLongRun {
     }
 
     static String readStatus(Context context) throws IOException {
-        Context deContext = BfuPreferences.deviceProtectedContext(context);
-        File file = new File(deContext.getFilesDir(), STATUS_FILE);
-        if (!file.isFile()) return "";
-        try (FileInputStream input = new FileInputStream(file);
-             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-            byte[] buffer = new byte[512];
-            int count;
-            while (output.size() < MAX_STATUS_BYTES
-                    && (count = input.read(buffer, 0,
-                    Math.min(buffer.length, MAX_STATUS_BYTES - output.size()))) >= 0) {
-                output.write(buffer, 0, count);
-            }
-            return new String(output.toByteArray(), StandardCharsets.UTF_8).trim();
-        }
+        return StatusStore.readText(new File(
+                BfuPreferences.deviceProtectedContext(context).getFilesDir(), STATUS_FILE));
     }
 
     static String readLiveReport(Context context) throws IOException {
@@ -95,30 +79,8 @@ final class HardwareCodecLongRun {
     }
 
     private static void writeStatus(Context context, String value) throws IOException {
-        Context deContext = BfuPreferences.deviceProtectedContext(context);
-        File destination = new File(deContext.getFilesDir(), STATUS_FILE);
-        File temporary = new File(deContext.getFilesDir(), STATUS_FILE + ".new");
-        String contents = System.currentTimeMillis() + " " + value + "\n";
-        try (FileOutputStream output = new FileOutputStream(temporary, false)) {
-            output.write(contents.getBytes(StandardCharsets.UTF_8));
-            output.getFD().sync();
-        }
-        setOwnerOnly(temporary);
-        if (destination.exists() && !destination.delete()) {
-            throw new IOException("cannot replace hardware codec long-run status");
-        }
-        if (!temporary.renameTo(destination)) {
-            throw new IOException("cannot publish hardware codec long-run status");
-        }
-        setOwnerOnly(destination);
+        StatusStore.write(new File(BfuPreferences.deviceProtectedContext(context).getFilesDir(),
+                STATUS_FILE), value);
     }
 
-    @SuppressWarnings("ResultOfMethodCallIgnored")
-    private static void setOwnerOnly(File file) {
-        file.setReadable(false, false);
-        file.setWritable(false, false);
-        file.setExecutable(false, false);
-        file.setReadable(true, true);
-        file.setWritable(true, true);
-    }
 }

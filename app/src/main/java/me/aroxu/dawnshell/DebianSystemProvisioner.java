@@ -138,11 +138,8 @@ final class DebianSystemProvisioner {
     }
 
     static String readStatus(Context context) throws IOException {
-        Context deContext = BfuPreferences.deviceProtectedContext(context);
-        File file = new File(deContext.getFilesDir(), STATUS_FILE);
-        if (!file.isFile()) return "";
-        byte[] bytes = readAtMost(file, 4 * 1024);
-        return new String(bytes, StandardCharsets.UTF_8).trim();
+        return StatusStore.readText(new File(
+                BfuPreferences.deviceProtectedContext(context).getFilesDir(), STATUS_FILE));
     }
 
     static String readLogTail(Context context) throws IOException {
@@ -191,41 +188,11 @@ final class DebianSystemProvisioner {
     }
 
     private static void writeStatus(Context deContext, String status) throws IOException {
-        File destination = new File(deContext.getFilesDir(), STATUS_FILE);
-        File temporary = new File(deContext.getFilesDir(), STATUS_FILE + ".new");
-        String contents = System.currentTimeMillis() + " " + status + "\n";
-        synchronized (FILE_LOCK) {
-            try (FileOutputStream output = new FileOutputStream(temporary, false)) {
-                output.write(contents.getBytes(StandardCharsets.UTF_8));
-                output.getFD().sync();
-            }
-            setOwnerOnly(temporary);
-            if (destination.exists() && !destination.delete()) {
-                throw new IOException("cannot replace configuration status");
-            }
-            if (!temporary.renameTo(destination)) {
-                throw new IOException("cannot publish configuration status");
-            }
-            setOwnerOnly(destination);
-        }
+        StatusStore.write(new File(deContext.getFilesDir(), STATUS_FILE), status);
     }
 
     private static File logFile(Context context) {
         return new File(context.getFilesDir(), LOG_FILE);
-    }
-
-    private static byte[] readAtMost(File file, int maximum) throws IOException {
-        try (FileInputStream input = new FileInputStream(file);
-             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-            byte[] buffer = new byte[512];
-            int count;
-            while (output.size() < maximum
-                    && (count = input.read(buffer, 0,
-                    Math.min(buffer.length, maximum - output.size()))) >= 0) {
-                output.write(buffer, 0, count);
-            }
-            return output.toByteArray();
-        }
     }
 
     private static String sanitizeChildLine(String value) {
