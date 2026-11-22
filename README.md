@@ -163,6 +163,7 @@ key is not a production signing identity.
 - [Debian rootfs installation](docs/rootfs-installation.md)
 - [Debian systemd and SSH](docs/debian-systemd.md)
 - [Hardware codec worker protocol](docs/hardware-codec-protocol.md)
+- [Native output schema](docs/native-output-schema.md)
 - [Hardware codec implementation decision record](docs/media-codec-bridge-plan.md)
 - [Build and release](docs/building.md)
 - [Embedded bootstrap runtime](bfu-runtime/README.md)

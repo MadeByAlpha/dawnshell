@@ -124,6 +124,12 @@ keyframes, timestamps, EOS, inherited shared-memory transport, and zero CPU YUV
 frames on the Surface path. `USER_UNLOCKED` does not stop Debian; a worker is
 created only when a codec command runs in either BFU or AFU.
 
+## Native results and status
+
+The native helpers print one JSON object per line and the app decodes it into typed Kotlin events; see the
+[native output schema](native-output-schema.md). Background operations persist their result as a JSON
+`*.status` file, which the UI reads as a typed `OperationStatus` instead of parsing text.
+
 ## SSH keys
 
 The app generates an Ed25519 key pair after unlock. The private half stays in app

@@ -179,6 +179,12 @@ session 통계는 keyframe, timestamp, EOS, 상속 shared-memory 전송과 Surfa
 `cpu_yuv_frames=0`을 검증합니다. `USER_UNLOCKED`는 Debian을 중지하지 않으며 BFU와
 AFU 모두 codec 명령 실행 시에만 worker가 생성됩니다.
 
+## 네이티브 결과와 상태
+
+네이티브 헬퍼는 한 줄에 JSON 객체 하나를 출력하고, 앱은 이를 타입이 있는 Kotlin 이벤트로 디코드합니다.
+[네이티브 출력 스키마](native-output-schema.ko.md)를 참고하세요. 백그라운드 작업의 결과는 JSON `*.status` 파일로 저장되며,
+UI는 텍스트를 파싱하는 대신 타입이 있는 `OperationStatus`로 읽습니다.
+
 ## SSH 키 흐름
 
 1. 사용자가 잠금을 해제한 뒤 앱이 임의 Ed25519 키 쌍을 생성합니다.

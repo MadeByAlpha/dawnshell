@@ -84,6 +84,7 @@ dist/dawnshell-app_v<version>+debug.apk
 ./scripts/test-ffmpeg-bridge-plan.sh
 ./scripts/test-live-codec-pipeline.sh
 ./scripts/test-gpu-status-tool.sh
+./scripts/test-native-output.sh
 ./scripts/test-host-reboot-isolation.sh
 ./scripts/test-rootfs-path-resolution.sh
 ./scripts/test-lifecycle-control-policy.sh

@@ -57,6 +57,6 @@ printf '%s\n' "$latest_runtime" | grep -Fq ' namespace_chroot=true '
 printf '%s\n' "$latest_runtime" | grep -Fq ' user_unlocked_before=false '
 printf '%s\n' "$latest_runtime" | grep -Fq ' user_unlocked_after=false '
 printf '%s\n' "$latest_runtime" | grep -Fq \
-  "BFU_DEBIAN_NAMESPACE_OK pid=1 proc1=sh arch=$debian_arch debian=13"
+  "\"event\":\"namespace_ok\",\"pid\":1,\"proc1\":\"sh\",\"arch\":\"$debian_arch\",\"debian\":13"
 
 echo "PASS: private namespaces, PID-namespace /proc, and Debian chroot worked during BFU."

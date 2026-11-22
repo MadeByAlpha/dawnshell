@@ -72,6 +72,7 @@ Use the [user manual](user-guide.md) for routine operation and the
 | [Rootfs installation](rootfs-installation.md) | Embedded tools, signature/hash verification, atomic publication, failure preservation |
 | [Debian systemd and SSH](debian-systemd.md) | Runtime mounts, PID 1, networking, SSH policy, stop and restart |
 | [Hardware codec worker protocol](hardware-codec-protocol.md) | `memfd`/`eventfd`, wire format, hardware selection, limits |
+| [Native output schema](native-output-schema.md) | JSON Lines events from native helpers and the `*.status` file format |
 | [Hardware codec decision record](media-codec-bridge-plan.md) | Why the final private-worker design was selected and what remains out of scope |
 | [Build and release](building.md) | Local build, parallel jobs, CI, signing, release contents |
 
