@@ -13,7 +13,7 @@
 # with ENOKEY and the manager stays degraded.
 set -euo pipefail
 
-repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)"
 guard_header="$repo_dir/app/src/main/cpp/dawnshell_close_range_guard.h"
 keyring_header="$repo_dir/app/src/main/cpp/dawnshell_keyring_guard.h"
 guard_source="$repo_dir/app/src/main/cpp/dawnshell_fdguard.c"

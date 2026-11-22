@@ -135,7 +135,7 @@ jobs:
         run: |
           set -euo pipefail
           "$DAWNSHELL_SHELLCHECK" --version
-          "$DAWNSHELL_SHELLCHECK" scripts/*.sh app/src/main/assets/bfu/*.sh
+          "$DAWNSHELL_SHELLCHECK" scripts/*.sh scripts/tests/*/*.sh app/src/main/assets/bfu/*.sh
 
       - name: Build, verify and test Android application
         id: apk
@@ -154,7 +154,7 @@ jobs:
           [[ -n "$apk_path" && -s "$apk_path" ]]
           "$ANDROID_HOME/build-tools/34.0.0/apksigner" \
             verify --verbose --print-certs "$apk_path"
-          ./scripts/test-release-compliance.sh "$apk_path"
+          ./scripts/tests/host/test-release-compliance.sh "$apk_path"
           echo "apk_path=$apk_path" >> "$GITHUB_OUTPUT"
 
       - name: Package APK, corresponding source, licenses and checksums

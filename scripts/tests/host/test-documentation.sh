@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
 if [[ -n "${PYTHON:-}" ]]; then
     python_command="$PYTHON"
@@ -14,4 +14,4 @@ else
     exit 127
 fi
 
-"$python_command" "$repo_dir/scripts/test-documentation.py"
+"$python_command" "$repo_dir/scripts/tests/host/test-documentation.py"

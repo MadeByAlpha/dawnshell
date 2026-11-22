@@ -79,27 +79,21 @@ dist/dawnshell-app_v<version>+debug.apk
 
 ## 자주 쓰는 개별 검사
 
-`./gradlew policyChecks`가 아래 스크립트를 실행하며 `./gradlew check`에도 포함됩니다.
-각 스크립트를 단독으로 실행할 수도 있습니다. `test-hardware-codec-bridge.sh`와
-`test-kernel-quirk-guards.sh`는 빌드된 바이너리를 검사하므로 먼저
-`./gradlew assembleBfuRuntimeAssets`를 실행하세요.
+`./gradlew policyChecks`가 `scripts/tests/host/*.sh`를 모두 실행하며 `./gradlew check`에도
+포함됩니다. Gradle이 디렉터리로 스크립트를 찾으므로 이 디렉터리에 새 스크립트를 두면
+빌드 파일을 고치지 않아도 됩니다. `DAWNSHELL_BFU_ASSETS_DIR`를 읽는(빌드된 바이너리를
+검사하는) 스크립트는 네이티브 런타임 빌드 뒤에 자동으로 실행됩니다. 각 스크립트를
+단독으로 실행할 수도 있으며, 먼저 `./gradlew assembleBfuRuntimeAssets`로 바이너리를
+빌드하세요.
 
 ```sh
-./scripts/test-release-compliance.sh
-./scripts/test-compatibility-policy.sh
-./scripts/test-docker-ipc-wrapper.sh
-./scripts/test-host-usb-policy.sh
-./scripts/test-hardware-codec-bridge.sh
-./scripts/test-ffmpeg-bridge-plan.sh
-./scripts/test-live-codec-pipeline.sh
-./scripts/test-gpu-status-tool.sh
-./scripts/test-native-output.sh
-./scripts/test-host-reboot-isolation.sh
-./scripts/test-rootfs-path-resolution.sh
-./scripts/test-lifecycle-control-policy.sh
-./scripts/test-documentation.sh
+./gradlew policyChecks
+./scripts/tests/host/test-release-compliance.sh
 ./gradlew :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
 ```
+
+실기기와 `adb`가 필요한 스크립트는 `scripts/tests/device/`에 있으며 Gradle이 실행하지
+않습니다.
 
 실기기 없이 통과하는 검사는 빌드·패키징·정적 정책을 확인합니다. BFU broadcast,
 Magisk/SELinux, 실제 vendor MediaCodec과 네트워크 복구는

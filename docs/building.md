@@ -69,27 +69,21 @@ dist/dawnshell-app_v<version>+debug.apk
 
 ## Individual checks
 
-`./gradlew policyChecks` runs the scripts below (also part of `./gradlew check`).
-Each script can still be run on its own; `test-hardware-codec-bridge.sh` and
-`test-kernel-quirk-guards.sh` inspect the built binaries, so run
-`./gradlew assembleBfuRuntimeAssets` first.
+`./gradlew policyChecks` runs every `scripts/tests/host/*.sh` script (also part of
+`./gradlew check`). Gradle discovers them by directory, so a new script there needs
+no build change; scripts that read `DAWNSHELL_BFU_ASSETS_DIR` (they inspect the
+built binaries) automatically run after the native runtime build. Each script can
+also be run on its own; build the binaries first with
+`./gradlew assembleBfuRuntimeAssets`.
 
 ```sh
-./scripts/test-release-compliance.sh
-./scripts/test-compatibility-policy.sh
-./scripts/test-docker-ipc-wrapper.sh
-./scripts/test-host-usb-policy.sh
-./scripts/test-hardware-codec-bridge.sh
-./scripts/test-ffmpeg-bridge-plan.sh
-./scripts/test-live-codec-pipeline.sh
-./scripts/test-gpu-status-tool.sh
-./scripts/test-native-output.sh
-./scripts/test-host-reboot-isolation.sh
-./scripts/test-rootfs-path-resolution.sh
-./scripts/test-lifecycle-control-policy.sh
-./scripts/test-documentation.sh
+./gradlew policyChecks
+./scripts/tests/host/test-release-compliance.sh
 ./gradlew :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
 ```
+
+Scripts that need a phone and `adb` live in `scripts/tests/device/` and are never
+run by Gradle.
 
 These prove host-build and static policy properties. Direct Boot broadcasts,
 Magisk/SELinux behavior, vendor MediaCodec, and network recovery still require

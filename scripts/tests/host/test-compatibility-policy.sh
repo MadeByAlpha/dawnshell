@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 preferences="$repo_dir/app/src/main/java/me/aroxu/dawnshell/BfuPreferences.java"
 launcher="$repo_dir/app/src/main/java/me/aroxu/dawnshell/DebianLauncher.java"
 native_launcher="$repo_dir/app/src/main/cpp/bfu_namespace_probe.c"
 policy_script="$repo_dir/app/src/main/assets/bfu/configure-docker-network.sh"
 usb_policy_script="$repo_dir/app/src/main/assets/bfu/configure-host-usb.sh"
-layout="$repo_dir/app/src/main/res/layout/activity_boot.xml"
+kotlin_dir="$repo_dir/app/src/main/kotlin/me/aroxu/dawnshell"
 strings="$repo_dir/app/src/main/res/values/strings.xml"
-boot_activity="$repo_dir/app/src/main/java/me/aroxu/dawnshell/BootActivity.java"
+boot_activity="$kotlin_dir/BootActivity.kt"
+boot_screen="$kotlin_dir/BootActivity.BootScreen.kt"
+actions="$kotlin_dir/BootScreen.kt"
+advanced_page="$kotlin_dir/BootActivity.BootScreen.ConfigurationPage.kt"
+compatibility_page="$kotlin_dir/BootScreen.kt"
+native_event="$kotlin_dir/NativeEvent.kt"
 boot_service="$repo_dir/app/src/main/java/me/aroxu/dawnshell/BfuBootService.java"
 runtime_probe="$repo_dir/app/src/main/java/me/aroxu/dawnshell/BfuDebianRuntimeProbe.java"
 system_configurator="$repo_dir/app/src/main/assets/bfu/configure-debian-systemd.sh"
@@ -32,7 +37,8 @@ grep -Fq 'BfuPreferences.usbPassthroughMode(context)' "$launcher"
 grep -Fq 'BfuPreferences.usbExclusiveDeviceIds(context)' "$launcher"
 grep -Fq 'BfuPreferences.cgroupPolicy(context)' "$launcher"
 grep -Fq 'BfuPreferences.pidNamespaceFallback(context)' "$launcher"
-grep -Fq 'cgroup_delegation=delegated' "$launcher"
+grep -Fq 'cgroup_delegation=delegated' "$native_launcher"
+grep -Fq '@SerialName("cgroup_delegation")' "$native_event"
 grep -Fq 'KEY_PID_NAMESPACE_FALLBACK, false' "$preferences"
 grep -Fq '"fallback" : "strict"' "$launcher"
 grep -Fq '"probe-compat" : "probe"' "$runtime_probe"
@@ -130,9 +136,9 @@ grep -Fq 'exec "$real_docker" "${rewritten[@]}"' "$policy_script"
 # shellcheck disable=SC2016 # Assert literal shell source, not this test's variables.
 grep -Fq 'existing unmanaged $docker_wrapper was preserved' "$policy_script"
 grep -Fq 'use /usr/bin/docker to bypass' "$policy_script"
-grep -Fq 'android:id="@+id/docker_network_policy_group"' "$layout"
-grep -Fq 'android:id="@+id/docker_storage_driver_group"' "$layout"
-grep -Fq 'android:id="@+id/docker_storage_vfs"' "$layout"
+grep -Fq 'R.string.dawnshell_docker_policy_title' "$compatibility_page"
+grep -Fq 'R.string.dawnshell_docker_storage_title' "$compatibility_page"
+grep -Fq 'BfuPreferences.DOCKER_STORAGE_VFS' "$compatibility_page"
 # The storage driver must be pinned explicitly so dockerd cannot silently pick
 # a different one after an upgrade.
 grep -Fq '"storage-driver": "overlay2",' "$policy_script"
@@ -140,17 +146,16 @@ grep -Fq '"storage-driver": "vfs",' "$policy_script"
 grep -Fq 'Docker storage driver must be overlay2 or vfs' "$policy_script"
 # shellcheck disable=SC2016 # Assert literal shell source, not this test's variables.
 grep -Fq 'storage_driver=$storage_driver' "$policy_script"
-grep -Fq 'android:id="@+id/switch_docker_host_ipc_compatibility"' "$layout"
-grep -Fq 'android:id="@+id/cgroup_policy_group"' "$layout"
-grep -Fq 'android:id="@+id/switch_pid_namespace_fallback"' "$layout"
-grep -Fq 'android:id="@+id/usb_passthrough_group"' "$layout"
-grep -Fq 'android:id="@+id/usb_passthrough_direct"' "$layout"
-grep -Fq 'android:id="@+id/usb_passthrough_exclusive"' "$layout"
-grep -Fq 'android:id="@+id/usb_exclusive_device_ids"' "$layout"
-grep -Fq 'android:id="@+id/settings_apply_bar"' "$layout"
-grep -Fq 'android:id="@+id/save_provision_button"' "$layout"
-grep -Fq 'android:id="@+id/dashboard_navigation"' "$layout"
-grep -Fq 'requestRuntimeSettingsApply(this' "$boot_activity"
+grep -Fq 'R.string.dawnshell_docker_host_ipc_compatibility' "$compatibility_page"
+grep -Fq 'R.string.dawnshell_cgroup_policy_title' "$compatibility_page"
+grep -Fq 'BfuPreferences.CGROUP_AUTO' "$compatibility_page"
+grep -Fq 'R.string.dawnshell_pid_namespace_fallback' "$compatibility_page"
+grep -Fq 'BfuPreferences.USB_PASSTHROUGH_DIRECT' "$compatibility_page"
+grep -Fq 'BfuPreferences.USB_PASSTHROUGH_EXCLUSIVE' "$compatibility_page"
+grep -Fq 's.usbDeviceIds' "$compatibility_page"
+grep -Fq 'if (state.settingsDirty) ApplyBar(actions)' "$boot_screen"
+grep -Fq 'actions::confirmApplySettings' "$boot_screen"
+grep -Fq 'BfuBootService.requestRuntimeSettingsApply(' "$boot_activity"
 grep -Fq 'ACTION_APPLY_RUNTIME_SETTINGS' "$boot_service"
 grep -Fq 'RUNTIME_SETTINGS_APPLIED' "$boot_service"
 grep -Fq 'applyAutomaticDockerMigration(layout, trigger)' "$boot_service"
@@ -159,12 +164,11 @@ grep -Eq 'MANAGED_CONFIGURATION_REVISION = [0-9]+;' \
     "$repo_dir/app/src/main/java/me/aroxu/dawnshell/DockerNetworkProvisioner.java"
 grep -Fq 'writeManagedRevision(deContext, MANAGED_CONFIGURATION_REVISION)' \
     "$repo_dir/app/src/main/java/me/aroxu/dawnshell/DockerNetworkProvisioner.java"
-if grep -Fq 'android:id="@+id/apply_host_usb_policy_button"' "$layout" \
-        || grep -Fq 'android:id="@+id/apply_docker_policy_button"' "$layout"; then
+if grep -Eq 'fun (confirm)?Apply(HostUsb|Docker)' "$actions"; then
     echo "USB and Docker must use the single global settings apply action" >&2
     exit 1
 fi
-[[ "$(grep -Fc 'android:text="@string/dawnshell_host_usb_title"' "$layout")" -eq 1 ]]
+[[ "$(grep -Fc 'R.string.dawnshell_host_usb_title' "$advanced_page")" -eq 1 ]]
 grep -Fq 'lsusb_legacy_sysfs_filter=enabled' "$usb_policy_script"
 grep -Fq '/rx_lanes:\ No\ such\ file\ or\ directory' "$usb_policy_script"
 grep -Fq '/tx_lanes:\ No\ such\ file\ or\ directory' "$usb_policy_script"

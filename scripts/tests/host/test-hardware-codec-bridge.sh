@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 client="$repo_dir/app/src/main/cpp/dawnshell_codec_client.c"
 worker="$repo_dir/app/src/main/cpp/dawnshell_codec_worker.c"
 ndk_codec="$repo_dir/app/src/main/cpp/dawnshell_codec_ndk.c"

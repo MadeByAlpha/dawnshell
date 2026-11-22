@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 system_configurator="$repo_dir/app/src/main/assets/bfu/configure-debian-systemd.sh"
 docker_configurator="$repo_dir/app/src/main/assets/bfu/configure-docker-network.sh"
 host_usb_configurator="$repo_dir/app/src/main/assets/bfu/configure-host-usb.sh"

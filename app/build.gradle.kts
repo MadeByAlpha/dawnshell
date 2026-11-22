@@ -273,43 +273,27 @@ val verifyBfuBootstrapRuntime = tasks.register("verifyBfuBootstrapRuntime") {
     }
 }
 
-// TODO: test-compatibility-policy, test-dashboard-settings-ux and test-lifecycle-control-policy still pin the
-// removed XML/Java UI and fail on the previous build too; port them to the Compose sources, then list them here.
-val policyCheckScripts = listOf(
-    "test-release-compliance",
-    "test-docker-ipc-wrapper",
-    "test-host-usb-policy",
-    "test-hardware-codec-bridge",
-    "test-ffmpeg-bridge-plan",
-    "test-kernel-quirk-guards",
-    "test-namespace-probe-invariants",
-    "test-live-codec-pipeline",
-    "test-gpu-status-tool",
-    "test-host-reboot-isolation",
-    "test-rootfs-path-resolution",
-    "test-croc-compatibility-wrapper",
-    "test-native-output",
-    "test-documentation",
-)
-val policyChecksNeedingBinaries = setOf("test-hardware-codec-bridge", "test-kernel-quirk-guards")
-
-val policyCheckTasks = policyCheckScripts.map { script ->
-    val taskName = "policyCheck" + script.removePrefix("test-").split("-").joinToString("") { it.replaceFirstChar(Char::uppercase) }
-    tasks.register<Exec>(taskName) {
-        group = "verification"
-        description = "Runs scripts/$script.sh."
-        workingDir = rootDir
-        commandLine("./scripts/$script.sh")
-        if (script in policyChecksNeedingBinaries) dependsOn(bfuRuntimeAssets)
-        doFirst {
-            environment("DAWNSHELL_BFU_ASSETS_DIR", bfuRuntimeAssets.get().outputDirectory.get().asFile.resolve("bfu").path)
+val policyCheckTasks = fileTree(rootDir.resolve("scripts/tests/host")) { include("*.sh") }.files
+    .sortedBy { it.name }
+    .map { script ->
+        val taskName = "policyCheck" + script.nameWithoutExtension.removePrefix("test-")
+            .split("-").joinToString("") { it.replaceFirstChar(Char::uppercase) }
+        tasks.register<Exec>(taskName) {
+            group = "verification"
+            description = "Runs scripts/tests/host/${script.name}."
+            workingDir = rootDir
+            commandLine("bash", script.path)
+            // Scripts that inspect the built binaries declare it by reading the generated assets directory.
+            if (script.readText().contains("DAWNSHELL_BFU_ASSETS_DIR")) dependsOn(bfuRuntimeAssets)
+            doFirst {
+                environment("DAWNSHELL_BFU_ASSETS_DIR", bfuRuntimeAssets.get().outputDirectory.get().asFile.resolve("bfu").path)
+            }
         }
     }
-}
 
 val policyChecks = tasks.register("policyChecks") {
     group = "verification"
-    description = "Runs the host-side policy and regression scripts in scripts/."
+    description = "Runs every host-side policy and regression script in scripts/tests/host/."
     dependsOn(policyCheckTasks)
 }
 

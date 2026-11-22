@@ -2,7 +2,7 @@
 # Pins the safety invariants of the namespace/cgroup launcher source.
 set -euo pipefail
 
-repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 namespace_source="$repo_dir/app/src/main/cpp/bfu_namespace_probe.c"
 
 if grep -Eq 'unshare[[:space:]]*\([[:space:]]*CLONE_NEWIPC' "$namespace_source"; then

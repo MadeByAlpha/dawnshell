@@ -75,7 +75,7 @@ times. The harness is:
 ```sh
 BFU_PHONE_HOST=PHONE_IP \
 BFU_SSH_KEY=/path/to/dawnshell-ed25519 \
-./scripts/test-final-bfu.sh
+./scripts/tests/device/test-final-bfu.sh
 ```
 
 Use `BFU_EXPECT_CE_READABLE_OVERRIDE=1` only on a ROM whose unsafe CE exposure has
@@ -124,7 +124,7 @@ The first command must run on hardware; the filtered command must be delegated
 to the real FFmpeg. `require` turns a software fallback into an error so a
 software result cannot be mistaken for hardware during benchmarking. Command
 routing itself is pinned without a device by
-`scripts/test-ffmpeg-bridge-plan.sh`.
+`scripts/tests/host/test-ffmpeg-bridge-plan.sh`.
 
 The short performance, quality, and error-regression button additionally checks
 the inherited memfd/eventfd path, B-frame MP4 timestamps, a matching 1080p

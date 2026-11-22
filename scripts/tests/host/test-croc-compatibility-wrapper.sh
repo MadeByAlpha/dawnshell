@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 wrapper_source="$repo_dir/app/src/main/assets/bfu/dawnshell-croc.sh"
 configurator="$repo_dir/app/src/main/assets/bfu/configure-debian-systemd.sh"
 runtime_java="$repo_dir/app/src/main/java/me/aroxu/dawnshell/BfuRuntime.java"

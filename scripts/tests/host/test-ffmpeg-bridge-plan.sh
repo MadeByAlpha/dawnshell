@@ -3,7 +3,7 @@
 # Android hardware codec and which fall back to plain FFmpeg.
 set -euo pipefail
 
-repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)"
 adapter="$repo_dir/app/src/main/assets/bfu/dawnshell-codec-ffmpeg.pl"
 wrapper_source="$repo_dir/app/src/main/assets/bfu/configure-debian-systemd.sh"
 test -f "$adapter"
@@ -249,7 +249,7 @@ while IFS= read -r pipeline_script; do
         echo "FAIL: $pipeline_script is committed as $mode; run git update-index --chmod=+x" >&2
         exit 1
     fi
-done < <(grep -ho 'scripts/[a-z0-9-]*\.sh' \
+done < <(grep -ho 'scripts/[a-z0-9/-]*\.sh' \
     "$repo_dir/.github/workflows/build.yml" \
     | sort -u)
 

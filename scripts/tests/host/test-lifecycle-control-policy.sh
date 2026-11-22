@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 service="$repo_dir/app/src/main/java/me/aroxu/dawnshell/BfuBootService.java"
 receiver="$repo_dir/app/src/main/java/me/aroxu/dawnshell/BootReceiver.java"
 launcher="$repo_dir/app/src/main/cpp/bfu_namespace_probe.c"
-activity="$repo_dir/app/src/main/java/me/aroxu/dawnshell/BootActivity.java"
-layout="$repo_dir/app/src/main/res/layout/activity_boot.xml"
+kotlin_dir="$repo_dir/app/src/main/kotlin/me/aroxu/dawnshell"
+activity="$kotlin_dir/BootActivity.kt"
+home_page="$kotlin_dir/BootActivity.BootScreen.HomePage.kt"
 
 grep -Fq 'lifecycleExecutor = Executors.newSingleThreadExecutor()' "$service"
 grep -Fq 'lifecycleFuture.cancel(true)' "$service"
@@ -17,7 +18,7 @@ grep -Fq 'requestLifecycleOperation(DebianLauncher.Operation.START,' "$service"
 grep -Fq '"boot_completed_unlocked"' "$service"
 grep -Fq 'ACTION_DEBIAN_FORCE_STOP' "$service"
 grep -Fq 'DebianLauncher.Operation.FORCE_STOP' "$activity"
-grep -Fq 'android:id="@+id/force_stop_debian_button"' "$layout"
+grep -Fq 'a.confirmForceStop()' "$home_page"
 grep -Fq 'strcmp(argv[1], "force-stop")' "$launcher"
 grep -Fq 'refusing_to_kill_unverified_supervisor' "$launcher"
 grep -Fq 'verified_supervisor_is_not_session_leader' "$launcher"

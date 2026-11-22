@@ -143,7 +143,7 @@ USB 저장장치는 Android와 Debian 중 한쪽에서만 마운트합니다.
 ```sh
 BFU_PHONE_HOST=PHONE_IP \
 BFU_SSH_KEY=/path/to/dawnshell-ed25519 \
-./scripts/test-final-bfu.sh
+./scripts/tests/device/test-final-bfu.sh
 ```
 
 수정 ROM이 BFU에서 앱 CE를 노출한다는 사실을 이미 확인했고 예외 정책을
@@ -220,7 +220,7 @@ Android `MediaExtractor`/하드웨어 `MediaCodec`이 DE 파일을 직접 읽습
 `dawnshell-codec health --format json`은 새 private worker가
 `worker_state=ready`에 도달하는지, `dawnshell-codec negative-test`는 잘못된 요청을
 격리한 뒤 후속 worker가 다시 동작하는지 확인합니다. 최종 5회
-시험은 `BFU_REQUIRE_HARDWARE_CODEC=1 BFU_CYCLES=5 scripts/test-final-bfu.sh`로
+시험은 `BFU_REQUIRE_HARDWARE_CODEC=1 BFU_CYCLES=5 scripts/tests/device/test-final-bfu.sh`로
 잠금 해제 전후에 동일한 검사를 실행합니다.
 
 기존 프로그램 자동 연동은 Debian에서 `dawnshell-ffmpeg`로 확인합니다.
@@ -233,7 +233,7 @@ dawnshell-ffmpeg -i input.mp4 -vf scale=640:480 -c:v libx264 out.mp4
 첫 명령은 hardware 경로로 처리되어야 하고, filter를 사용한 두 번째 명령은 실제
 FFmpeg로 위임되어야 합니다. `require` 모드는 software fallback을 오류로 만들므로
 성능 비교 시 software 결과를 hardware로 오인하지 않게 합니다. 명령줄 판정 자체는
-`scripts/test-ffmpeg-bridge-plan.sh`가 기기 없이 회귀로 고정합니다.
+`scripts/tests/host/test-ffmpeg-bridge-plan.sh`가 기기 없이 회귀로 고정합니다.
 
 앱의 **단기 성능·품질·오류 회귀 검사**는 다음을 한 번에 수행합니다.
 
@@ -263,7 +263,7 @@ software 대비 CPU 감소율을 기록하되 임의의 수치로 실패시키�
 BFU_REQUIRE_HARDWARE_CODEC=1 \
 BFU_REQUIRE_CODEC_PERFORMANCE=1 \
 BFU_CYCLES=5 \
-scripts/test-final-bfu.sh
+scripts/tests/device/test-final-bfu.sh
 ```
 
 결과 `summary.tsv`에는 cycle별 Android boot ID와 systemd PID, BFU/AFU private

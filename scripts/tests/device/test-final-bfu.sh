@@ -17,7 +17,7 @@ if [[ "${BFU_REQUIRE_CODEC_PERFORMANCE:-0}" == "1"
   exit 2
 fi
 
-repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cycles="${BFU_CYCLES:-5}"
 results_dir="${BFU_RESULTS_DIR:-$repo_dir/test-results/bfu-$(date -u +%Y%m%dT%H%M%SZ)}"
 
@@ -142,7 +142,7 @@ for ((cycle = 1; cycle <= cycles; cycle++)); do
   echo "============================================================"
   echo "Final BFU cold cycle $cycle/$cycles"
   cycle_log="$results_dir/cycle-$(printf '%02d' "$cycle").log"
-  "$repo_dir/scripts/test-systemd-ssh-bfu.sh" 2>&1 | tee "$cycle_log"
+  "$repo_dir/scripts/tests/device/test-systemd-ssh-bfu.sh" 2>&1 | tee "$cycle_log"
 
   boot_id="$(adb shell cat /proc/sys/kernel/random/boot_id | tr -d '\r\n')"
   app_pid="$(adb shell pidof me.aroxu.dawnshell | tr -d '\r\n' || true)"
@@ -233,7 +233,7 @@ fi
 
 echo "============================================================"
 echo "Running namespace poweroff/reboot/shutdown isolation checks..."
-"$repo_dir/scripts/test-systemd-shutdown-isolation.sh" 2>&1 \
+"$repo_dir/scripts/tests/device/test-systemd-shutdown-isolation.sh" 2>&1 \
   | tee "$results_dir/shutdown-isolation.log"
 
 cp "$summary" "$results_dir/summary.tsv"

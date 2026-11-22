@@ -3,7 +3,7 @@
 # that publishes different attribute names is caught before shipping.
 set -euo pipefail
 
-repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)"
 source_script="$repo_dir/app/src/main/assets/bfu/gsmi.sh"
 configurator="$repo_dir/app/src/main/assets/bfu/configure-debian-systemd.sh"
 test -f "$source_script"

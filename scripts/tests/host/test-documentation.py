@@ -10,7 +10,7 @@ import sys
 import urllib.parse
 
 
-REPO = pathlib.Path(__file__).resolve().parent.parent
+REPO = pathlib.Path(__file__).resolve().parents[3]
 DOCS = REPO / "docs"
 ROOT_README = REPO / "README.md"
 ROOT_README_KO = REPO / "README.ko.md"
