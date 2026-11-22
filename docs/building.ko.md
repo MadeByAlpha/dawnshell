@@ -35,36 +35,40 @@ BusyBox, `pkgdetails`, `gpgv`, debootstrap 자료와 namespace 런처는 고정�
 ```sh
 export JAVA_HOME=/path/to/jdk17
 export ANDROID_HOME=/path/to/android-sdk
-export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.14206865"
 ```
 
-NDK 변수를 생략하면 빌드 스크립트가 위 SDK 경로의 고정 버전을 사용합니다.
+SDK에 NDK `29.0.14206865`를 설치하세요(`sdkmanager "ndk;29.0.14206865"`). Gradle이
+`ndkVersion`으로 정확히 그 버전을 선택하므로 `ANDROID_NDK_HOME`은 필요 없습니다.
 
 ## 전체 빌드
 
 ```sh
-./scripts/build-all.sh
+./gradlew clean policyChecks :app:lintDebug :app:testDebugUnitTest :app:stageDebugApk
 ```
 
 이 명령은 다음 작업을 수행합니다.
 
-1. 고정 소스에서 세 ABI의 부트스트랩 런타임을 빌드합니다.
-2. Docker, USB, 코덱, FFmpeg, 재부팅 격리와 lifecycle 정책 검사를 실행합니다.
+1. `buildSrc/`의 Gradle 태스크가 고정 소스에서 세 ABI의 부트스트랩 런타임(BusyBox,
+   `pkgdetails`, `gpgv`, namespace 런처, `dawnshell-fdguard`, 코덱 client·worker)을
+   빌드하고 모든 ELF를 검증해 생성 asset으로 포함합니다. 바이너리는 커밋하지
+   않습니다.
+2. Docker, USB, 코덱, FFmpeg, 재부팅 격리 정책 검사를 실행합니다.
 3. Android unit test와 lint를 실행합니다.
 4. debug APK를 만들고 `dist/`에 복사합니다.
 
-기본 병렬 빌드는 `make -j"$(nproc)"`입니다. 메모리가 부족하거나 다른 작업과
-병행한다면 작업 수를 제한합니다.
+네이티브 소스가 바뀌지 않았다면 Gradle의 up-to-date 검사와 빌드 캐시로 결과를
+재사용합니다. 기본 병렬 빌드는 `make -j"$(nproc)"`입니다. 메모리가 부족하거나 다른
+작업과 병행한다면 작업 수를 제한합니다.
 
 ```sh
-DAWNSHELL_BUILD_JOBS=4 ./scripts/build-all.sh
+DAWNSHELL_BUILD_JOBS=4 ./gradlew assembleBfuRuntimeAssets
 ```
 
-이미 같은 소스에서 런타임을 빌드했고 Android 코드만 빠르게 확인하려면 다음을
-사용할 수 있습니다. Release 검증에는 사용하지 마세요.
+하나의 ABI만 빠르게 확인하려면 다음을 사용할 수 있습니다. Release 검증에는 사용하지
+마세요.
 
 ```sh
-DAWNSHELL_SKIP_BOOTSTRAP_SOURCE_BUILD=1 ./scripts/build-all.sh
+./gradlew -PdawnshellBfuAbis=arm64-v8a :app:assembleDebug
 ```
 
 기본 출력 파일 이름은 다음 형식입니다.
@@ -75,22 +79,21 @@ dist/dawnshell-app_v<version>+debug.apk
 
 ## 자주 쓰는 개별 검사
 
+`./gradlew policyChecks`가 `scripts/tests/host/*.sh`를 모두 실행하며 `./gradlew check`에도
+포함됩니다. Gradle이 디렉터리로 스크립트를 찾으므로 이 디렉터리에 새 스크립트를 두면
+빌드 파일을 고치지 않아도 됩니다. `DAWNSHELL_BFU_ASSETS_DIR`를 읽는(빌드된 바이너리를
+검사하는) 스크립트는 네이티브 런타임 빌드 뒤에 자동으로 실행됩니다. 각 스크립트를
+단독으로 실행할 수도 있으며, 먼저 `./gradlew assembleBfuRuntimeAssets`로 바이너리를
+빌드하세요.
+
 ```sh
-./scripts/test-release-compliance.sh
-./scripts/test-compatibility-policy.sh
-./scripts/test-docker-ipc-wrapper.sh
-./scripts/test-host-usb-policy.sh
-./scripts/test-hardware-codec-bridge.sh
-./scripts/test-ffmpeg-bridge-plan.sh
-./scripts/test-live-codec-pipeline.sh
-./scripts/test-gpu-status-tool.sh
-./scripts/test-native-output.sh
-./scripts/test-host-reboot-isolation.sh
-./scripts/test-rootfs-path-resolution.sh
-./scripts/test-lifecycle-control-policy.sh
-./scripts/test-documentation.sh
+./gradlew policyChecks
+./scripts/tests/host/test-release-compliance.sh
 ./gradlew :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
 ```
+
+실기기와 `adb`가 필요한 스크립트는 `scripts/tests/device/`에 있으며 Gradle이 실행하지
+않습니다.
 
 실기기 없이 통과하는 검사는 빌드·패키징·정적 정책을 확인합니다. BFU broadcast,
 Magisk/SELinux, 실제 vendor MediaCodec과 네트워크 복구는

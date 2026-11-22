@@ -125,13 +125,13 @@ The short path is:
 ```sh
 export JAVA_HOME=/path/to/jdk17
 export ANDROID_HOME=/path/to/android-sdk
-export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.14206865"
-./scripts/build-all.sh
+./gradlew clean policyChecks :app:lintDebug :app:testDebugUnitTest :app:stageDebugApk
 ```
 
-Compilation uses `make -j"$(nproc)"` by default. Set `DAWNSHELL_BUILD_JOBS` to
-limit parallel jobs. The debug APK is written as
-`dist/dawnshell-app_v<version>+debug.apk`.
+Gradle compiles the bundled native runtime for every ABI from pinned source;
+NDK `29.0.14206865` must be installed in the SDK. Compilation uses
+`make -j"$(nproc)"` by default. Set `DAWNSHELL_BUILD_JOBS` to limit parallel
+jobs. The debug APK is written as `dist/dawnshell-app_v<version>+debug.apk`.
 
 See [Build and release](docs/building.md) for dependencies, Windows/MSYS2,
 individual checks, signing, CI behavior, and release packaging. The public debug

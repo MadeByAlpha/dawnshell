@@ -16,12 +16,13 @@ installer preflight.
 - Pinned sources and hashes: `sources/SOURCES.lock`
 - Android patches: `patches/`
 - Minimal build configuration: `config/`
-- Build script: `../scripts/build-bootstrap-runtime.sh`
+- Build tasks: `../buildSrc/` (`BfuRuntime.kt` registers them)
 - Third-party licensing: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 
 Users do not copy these files to a phone manually. The app provisions only the
 verified output matching the current ABI into DE storage. After any source
-change, run `scripts/build-all.sh` so all ABI and license checks run together.
+change, run `./gradlew policyChecks :app:assembleDebug` so all ABI and license checks run
+together. The binaries are generated at build time and are not committed.
 
 Never commit device keys, PIDs, logs, or `authorized_keys`. Runtime state belongs
 only in app Device Encrypted storage or the reviewed Debian rootfs.

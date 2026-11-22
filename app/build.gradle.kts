@@ -1,4 +1,6 @@
 import com.android.build.api.variant.impl.VariantOutputImpl
+import me.aroxu.dawnshell.gradle.BfuRuntimeAssetsTask
+import me.aroxu.dawnshell.gradle.registerBfuRuntime
 import java.util.Locale
 
 plugins {
@@ -52,8 +54,11 @@ fun validateVersionName(versionName: String) {
     }
 }
 
+val bfuNdkVersion = "29.0.14206865"
+
 android {
     namespace = "me.aroxu.dawnshell"
+    ndkVersion = bfuNdkVersion
 
     compileSdk {
         version = release(37) {
@@ -119,9 +124,18 @@ android {
 
 }
 
+val bfuRuntimeAssets = registerBfuRuntime(
+    ndkDirectory = androidComponents.sdkComponents.ndkDirectory,
+    ndkVersion = bfuNdkVersion,
+    androidApi = providers.gradleProperty("minSdkVersion").map { it.toInt() },
+    abiIds = providers.gradleProperty("dawnshellBfuAbis")
+        .orElse("armeabi-v7a,arm64-v8a,x86_64").get().split(","),
+)
+
 androidComponents {
     onVariants { variant ->
         variant.sources.assets?.addStaticSourceDirectory(generatedLicenseAssetsDir.get().asFile.path)
+        variant.sources.assets?.addGeneratedSourceDirectory(bfuRuntimeAssets, BfuRuntimeAssetsTask::outputDirectory)
         val apkName = "dawnshell-app_" + apkVersionTag.ifEmpty { "v${android.defaultConfig.versionName}+${variant.buildType}" } + ".apk"
         variant.outputs.forEach { (it as VariantOutputImpl).outputFileName.set(apkName) }
     }
@@ -154,14 +168,7 @@ tasks.register("versionName") {
     }
 }
 
-val bfuBootstrapAbis = listOf("armeabi-v7a", "arm64-v8a", "x86_64")
-val bfuBootstrapExecutables = listOf(
-    "dawnshell-toolbox", "pkgdetails", "gpgv", "bfu-namespace-probe",
-    "dawnshell-fdguard",
-    "dawnshell-codec", "dawnshell-codec-worker")
-val bfuBootstrapAssets = (bfuBootstrapAbis.flatMap { abi ->
-    bfuBootstrapExecutables.map { "bin/$abi/$it" } + "bin/$abi/runtime.properties"
-} + listOf(
+val bfuBootstrapAssets = listOf(
     "bootstrap/debootstrap_1.0.141.tgz",
     "bootstrap/debian-archive-keyring_2025.1_all.deb",
     "bootstrap/SOURCES.lock",
@@ -179,7 +186,7 @@ val bfuBootstrapAssets = (bfuBootstrapAbis.flatMap { abi ->
     "dawnshell-codec-long-run.sh",
     "dawnshell-codec-concurrency-test.sh",
     "dawnshell-codec-error-test.sh",
-)).map { file("src/main/assets/bfu/$it") }
+).map { file("src/main/assets/bfu/$it") }
 
 val requiredLicenseFiles = listOf(
     "README.md",
@@ -264,6 +271,41 @@ val verifyBfuBootstrapRuntime = tasks.register("verifyBfuBootstrapRuntime") {
             }
         }
     }
+}
+
+val policyCheckTasks = fileTree(rootDir.resolve("scripts/tests/host")) { include("*.sh") }.files
+    .sortedBy { it.name }
+    .map { script ->
+        val taskName = "policyCheck" + script.nameWithoutExtension.removePrefix("test-")
+            .split("-").joinToString("") { it.replaceFirstChar(Char::uppercase) }
+        tasks.register<Exec>(taskName) {
+            group = "verification"
+            description = "Runs scripts/tests/host/${script.name}."
+            workingDir = rootDir
+            commandLine("bash", script.path)
+            // Scripts that inspect the built binaries declare it by reading the generated assets directory.
+            if (script.readText().contains("DAWNSHELL_BFU_ASSETS_DIR")) dependsOn(bfuRuntimeAssets)
+            doFirst {
+                environment("DAWNSHELL_BFU_ASSETS_DIR", bfuRuntimeAssets.get().outputDirectory.get().asFile.resolve("bfu").path)
+            }
+        }
+    }
+
+val policyChecks = tasks.register("policyChecks") {
+    group = "verification"
+    description = "Runs every host-side policy and regression script in scripts/tests/host/."
+    dependsOn(policyCheckTasks)
+}
+
+tasks.named("check") {
+    dependsOn(policyChecks)
+}
+
+tasks.register<Copy>("stageDebugApk") {
+    description = "Copies the debug APK to dist/ for scripts/install.sh and the device tests."
+    dependsOn("assembleDebug")
+    from(layout.buildDirectory.dir("outputs/apk/debug")) { include("*.apk") }
+    into(rootProject.layout.projectDirectory.dir("dist"))
 }
 
 tasks.named("preBuild") {

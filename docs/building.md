@@ -24,8 +24,11 @@ cd dawnshell
 
 export JAVA_HOME=/path/to/jdk17
 export ANDROID_HOME=/path/to/android-sdk
-export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.14206865"
 ```
+
+Install NDK `29.0.14206865` in the SDK (`sdkmanager "ndk;29.0.14206865"`). Gradle
+selects exactly that version through `ndkVersion`, so `ANDROID_NDK_HOME` is not
+needed.
 
 DawnShell does not depend on separate Termux repositories. BusyBox,
 `pkgdetails`, `gpgv`, debootstrap material, and the namespace launcher are built
@@ -34,23 +37,28 @@ from pinned source and patches in this repository.
 ## Full build
 
 ```sh
-./scripts/build-all.sh
+./gradlew clean policyChecks :app:lintDebug :app:testDebugUnitTest :app:stageDebugApk
 ```
 
-The script builds `armeabi-v7a`, `arm64-v8a`, and `x86_64` bootstrap runtimes,
-runs policy and bridge regressions, executes Android lint and unit tests, and
-copies the debug APK to `dist/`.
+Gradle builds the `armeabi-v7a`, `arm64-v8a`, and `x86_64` bootstrap runtimes
+(BusyBox, `pkgdetails`, `gpgv`, the namespace launcher, `dawnshell-fdguard`, and
+the codec client and worker) from the pinned sources with the tasks in
+`buildSrc/`, validates every ELF, and packages the result as generated assets.
+The binaries are not committed. Gradle then runs the policy and bridge
+regressions, Android lint and unit tests, and copies the debug APK to `dist/`.
+Unchanged native sources are reused from Gradle's up-to-date checks and build
+cache.
 
 Compilation defaults to `make -j"$(nproc)"`. Limit parallelism when necessary:
 
 ```sh
-DAWNSHELL_BUILD_JOBS=4 ./scripts/build-all.sh
+DAWNSHELL_BUILD_JOBS=4 ./gradlew assembleBfuRuntimeAssets
 ```
 
-For a local Android-only iteration after building identical native sources:
+For a local iteration on one ABI:
 
 ```sh
-DAWNSHELL_SKIP_BOOTSTRAP_SOURCE_BUILD=1 ./scripts/build-all.sh
+./gradlew -PdawnshellBfuAbis=arm64-v8a :app:assembleDebug
 ```
 
 Do not use that shortcut as release evidence. The normal output is:
@@ -61,22 +69,21 @@ dist/dawnshell-app_v<version>+debug.apk
 
 ## Individual checks
 
+`./gradlew policyChecks` runs every `scripts/tests/host/*.sh` script (also part of
+`./gradlew check`). Gradle discovers them by directory, so a new script there needs
+no build change; scripts that read `DAWNSHELL_BFU_ASSETS_DIR` (they inspect the
+built binaries) automatically run after the native runtime build. Each script can
+also be run on its own; build the binaries first with
+`./gradlew assembleBfuRuntimeAssets`.
+
 ```sh
-./scripts/test-release-compliance.sh
-./scripts/test-compatibility-policy.sh
-./scripts/test-docker-ipc-wrapper.sh
-./scripts/test-host-usb-policy.sh
-./scripts/test-hardware-codec-bridge.sh
-./scripts/test-ffmpeg-bridge-plan.sh
-./scripts/test-live-codec-pipeline.sh
-./scripts/test-gpu-status-tool.sh
-./scripts/test-native-output.sh
-./scripts/test-host-reboot-isolation.sh
-./scripts/test-rootfs-path-resolution.sh
-./scripts/test-lifecycle-control-policy.sh
-./scripts/test-documentation.sh
+./gradlew policyChecks
+./scripts/tests/host/test-release-compliance.sh
 ./gradlew :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
 ```
+
+Scripts that need a phone and `adb` live in `scripts/tests/device/` and are never
+run by Gradle.
 
 These prove host-build and static policy properties. Direct Boot broadcasts,
 Magisk/SELinux behavior, vendor MediaCodec, and network recovery still require

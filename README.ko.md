@@ -115,12 +115,13 @@ PIN 입력 전에 사용할 데이터에는 재사용 auth key, API token, SSH �
 ```sh
 export JAVA_HOME=/path/to/jdk17
 export ANDROID_HOME=/path/to/android-sdk
-export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.14206865"
-./scripts/build-all.sh
+./gradlew clean policyChecks :app:lintDebug :app:testDebugUnitTest :app:stageDebugApk
 ```
 
-기본값은 `make -j"$(nproc)"`이며 `DAWNSHELL_BUILD_JOBS`로 병렬 작업 수를 제한할
-수 있습니다. debug APK는 `dist/dawnshell-app_v<version>+debug.apk`에 생성됩니다.
+Gradle이 내장 네이티브 런타임을 고정 소스에서 모든 ABI용으로 컴파일하며, SDK에
+NDK `29.0.14206865`가 설치되어 있어야 합니다. 기본값은 `make -j"$(nproc)"`이며
+`DAWNSHELL_BUILD_JOBS`로 병렬 작업 수를 제한할 수 있습니다. debug APK는
+`dist/dawnshell-app_v<version>+debug.apk`에 생성됩니다.
 
 필요 패키지, Windows/MSYS2, 개별 검사, 서명, CI와 Release 묶음은
 [빌드와 배포](docs/building.ko.md)를 참고하세요. 공개 debug 키는 제품용 서명 키가
