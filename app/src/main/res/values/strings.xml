@@ -112,7 +112,7 @@
     <string name="bfu_stop_confirm_title">Stop BFU Debian?</string>
     <string name="bfu_stop_confirm_message">This explicitly asks the Debian container service manager to exit gracefully and stops SSH. Unlock events do not perform this action.</string>
     <string name="bfu_stop_confirm_button">Stop Debian</string>
-    <string name="bfu_force_stop_debian_short">Force-stop stuck supervisor</string>
+    <string name="bfu_force_stop_debian_short">Force-stop supervisor</string>
     <string name="bfu_force_stop_confirm_title">Force-stop Debian?</string>
     <string name="bfu_force_stop_confirm_message">Use this only after normal Stop fails with supervisor_did_not_release_lock. DawnShell revalidates the recorded supervisor and Debian init identities, then sends SIGKILL and waits for the kernel to release the process lock. Unsaved work is lost. It never deletes the lock file or kills an unverified PID. A process stuck in uninterruptible kernel sleep may still require an Android reboot.</string>
     <string name="bfu_force_stop_confirm_button">Force stop</string>
@@ -126,6 +126,9 @@
     <string name="bfu_lifecycle_status_failed">Failed to read Debian lifecycle status: %1$s</string>
     <string name="bfu_lifecycle_log_title">Debian systemd lifecycle log (live, newest 64 KiB):</string>
     <string name="bfu_password_explanation">Local Debian account passwords (AFU only). Values are sent directly to Debian chpasswd and are never saved in Android preferences, BFU storage, or logs. SSH remains public-key-only. Setting the root password allows “su root” inside Debian and grants device-level root authority; use a unique strong password.</string>
+    <string name="bfu_password_menu_title">Set %1$s password</string>
+    <string name="bfu_password_hint">New %1$s password (8–128 characters)</string>
+    <string name="bfu_password_confirm_hint">Confirm %1$s password</string>
     <string name="bfu_root_password_hint">New Debian root password (8–128 characters)</string>
     <string name="bfu_root_password_confirm_hint">Confirm Debian root password</string>
     <string name="bfu_debian_password_hint">New debian user password (8–128 characters)</string>
@@ -173,6 +176,9 @@
     <string name="dawnshell_apply_changes_saved_for_next_start">Settings saved. Runtime changes will take effect the next time Debian starts.</string>
     <string name="dawnshell_apply_changes_none">There are no pending settings to apply.</string>
     <string name="dawnshell_apply_changes_requires_unlock">Unlock Android before applying namespace compatibility, USB, cgroup, or Docker settings.</string>
+    <string name="dawnshell_advanced_warning">Advanced kernel and container settings can affect the whole Android system. Read the full warning in each item before applying.</string>
+    <string name="dawnshell_ssh_key_manage">Manage SSH private key</string>
+    <string name="dawnshell_navigation_setup">Setup</string>
     <string name="dawnshell_navigation_home">Home</string>
     <string name="dawnshell_navigation_access">Access</string>
     <string name="dawnshell_navigation_advanced">Advanced</string>

@@ -19,10 +19,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -183,6 +186,38 @@ fun SwitchRow(
     ) {
         Text(label, Modifier.weight(1f).padding(end = 16.dp), color = contentColor, style = MaterialTheme.typography.bodyLarge)
         Switch(checked = checked, onCheckedChange = null)
+    }
+}
+
+@Composable
+fun SubPageRow(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    description: String? = null,
+) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .heightIn(min = 52.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            if (description != null)
+                Text(
+                    description, Modifier.padding(top = 2.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                )
+        }
+        Icon(
+            painterResource(R.drawable.ic_chevron_right_24),
+            contentDescription = null,
+            modifier = Modifier.padding(start = 12.dp).size(24.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

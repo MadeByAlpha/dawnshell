@@ -112,7 +112,7 @@
     <string name="bfu_stop_confirm_title">BFU Debian을 중지할까요?</string>
     <string name="bfu_stop_confirm_message">Debian 컨테이너 서비스 관리자가 정상 종료하도록 명시적으로 요청하고 SSH를 중지합니다. 잠금 해제 이벤트에서는 이 작업을 실행하지 않습니다.</string>
     <string name="bfu_stop_confirm_button">Debian 중지</string>
-    <string name="bfu_force_stop_debian_short">멈춘 감독 프로세스 강제 종료</string>
+    <string name="bfu_force_stop_debian_short">프로세스 강제 종료</string>
     <string name="bfu_force_stop_confirm_title">Debian을 강제로 종료할까요?</string>
     <string name="bfu_force_stop_confirm_message">일반 중지가 supervisor_did_not_release_lock 오류로 실패한 경우에만 사용하세요. DawnShell은 기록된 감독 프로세스와 Debian init의 PID, 시작 시각, 실행 파일 신원을 다시 검증한 후 SIGKILL을 보내고 커널이 프로세스 lock을 실제로 반환할 때까지 기다립니다. 저장하지 않은 작업은 사라집니다. lock 파일을 삭제하거나 검증되지 않은 PID를 종료하지 않습니다. 프로세스가 커널의 중단 불가능 절전 상태에 멈춘 경우에는 Android 재부팅이 필요할 수 있습니다.</string>
     <string name="bfu_force_stop_confirm_button">강제 종료</string>
@@ -126,6 +126,7 @@
     <string name="bfu_lifecycle_status_failed">Debian 수명 주기 상태를 읽지 못했습니다: %1$s</string>
     <string name="bfu_lifecycle_log_title">Debian systemd 수명 주기 로그(실시간, 최신 64 KiB):</string>
     <string name="bfu_password_explanation">Debian 로컬 계정 암호입니다(AFU 전용). 값은 Debian chpasswd로 직접 전달되며 Android 설정, BFU 저장소 또는 로그에 저장되지 않습니다. SSH는 공개 키 인증만 유지합니다. 루트 암호를 설정하면 Debian에서 su root를 사용하여 기기 수준의 루트 권한을 얻을 수 있으므로 고유하고 강력한 암호를 사용하세요.</string>
+    <string name="bfu_password_confirm_hint">%1$s 암호 확인</string>
     <string name="bfu_root_password_hint">새 Debian root 암호(8~128자)</string>
     <string name="bfu_root_password_confirm_hint">Debian root 암호 확인</string>
     <string name="bfu_debian_password_hint">새 debian 사용자 암호(8~128자)</string>
@@ -173,6 +174,9 @@
     <string name="dawnshell_apply_changes_saved_for_next_start">설정을 저장했습니다. 런타임 변경은 다음 Debian 시작 때 적용됩니다.</string>
     <string name="dawnshell_apply_changes_none">적용할 설정 변경사항이 없습니다.</string>
     <string name="dawnshell_apply_changes_requires_unlock">네임스페이스 호환성, USB, cgroup 또는 Docker 설정을 적용하려면 Android 잠금을 먼저 해제하세요.</string>
+    <string name="dawnshell_advanced_warning">고급 커널·컨테이너 설정은 Android 전체에 영향을 줄 수 있습니다. 각 항목에서 경고 전문을 읽고 적용하세요.</string>
+    <string name="dawnshell_ssh_key_manage">SSH 개인 키 관리</string>
+    <string name="dawnshell_navigation_setup">구성</string>
     <string name="dawnshell_navigation_home">홈</string>
     <string name="dawnshell_navigation_access">접속</string>
     <string name="dawnshell_navigation_advanced">고급</string>
@@ -306,4 +310,6 @@
     <string name="dawnshell_log_hardware_codec_description">MediaCodec 목록, 하드웨어 판정, BFU 준비 상태 및 AVC/HEVC 인스턴스 생성 결과입니다.</string>
     <string name="dawnshell_log_codec_long_run_title">하드웨어 코덱 장시간 검사</string>
     <string name="dawnshell_log_codec_long_run_description">다섯 작업 MediaCodec 안정성 검사의 systemd 상태와 journal을 실시간으로 표시합니다. 위로 스크롤하면 자동 따라가기가 멈추고 맨 아래로 돌아오면 다시 시작됩니다.</string>
+    <string name="bfu_password_menu_title">%1$s 암호 설정</string>
+    <string name="bfu_password_hint">새 %1$s 암호 (8~128자)</string>
 </resources>

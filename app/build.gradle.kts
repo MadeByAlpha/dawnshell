@@ -4,6 +4,7 @@ import java.util.Locale
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 val releaseStorePath = System.getenv("DAWNSHELL_RELEASE_STORE_FILE").orEmpty()
@@ -54,7 +55,11 @@ fun validateVersionName(versionName: String) {
 android {
     namespace = "me.aroxu.dawnshell"
 
-    compileSdk = providers.gradleProperty("compileSdkVersion").get().toInt()
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 2
+        }
+    }
 
     defaultConfig {
         applicationId = "me.aroxu.dawnshell"
@@ -133,6 +138,8 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.navigation3.ui)
+    implementation(libs.kotlinx.serialization.core)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation("junit:junit:4.13.2")

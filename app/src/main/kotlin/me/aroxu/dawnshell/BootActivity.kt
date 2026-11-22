@@ -23,9 +23,11 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -54,8 +56,11 @@ internal class BootActivity : AppCompatActivity(), BootActions {
         super.onCreate(savedInstanceState)
         loadSettings()
         setContent {
-            DawnShellTheme {
-                BootScreen(state, this, onDiscard = ::finish)
+            // HACK: AppCompatActivity does not publish its NavigationEventDispatcherOwner to the view tree.
+            CompositionLocalProvider(LocalNavigationEventDispatcherOwner provides this) {
+                DawnShellTheme {
+                    BootScreen(state, this, onDiscard = ::finish)
+                }
             }
         }
         lifecycleScope.launch {
