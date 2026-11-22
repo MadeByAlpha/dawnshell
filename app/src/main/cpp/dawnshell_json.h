@@ -17,6 +17,9 @@
 #define DS_JSON_SCHEMA_VERSION 1
 #define DS_JSON_RESERVE 40
 
+/* Kept out of line: inlining the writer at every call site costs ~16 KiB per ABI. */
+#define DS_JSON_OUTLINE static __attribute__((noinline, unused))
+
 #ifndef DS_JSON_NOW
 #define DS_JSON_NOW() ((long long) time(NULL))
 #endif
@@ -30,7 +33,7 @@ typedef struct {
     bool overflow;
 } DsJson;
 
-static inline void ds_json_put(DsJson *j, const char *text, size_t length) {
+DS_JSON_OUTLINE void ds_json_put(DsJson *j, const char *text, size_t length) {
     if (j->overflow || j->len + length + DS_JSON_RESERVE > j->cap) {
         j->overflow = true;
         return;
@@ -56,7 +59,7 @@ static inline size_t ds_json_utf8_length(const unsigned char *s, size_t remainin
     return need;
 }
 
-static inline void ds_json_quoted(DsJson *j, const char *value) {
+DS_JSON_OUTLINE void ds_json_quoted(DsJson *j, const char *value) {
     static const char hex[] = "0123456789abcdef";
     ds_json_putc(j, '"');
     const unsigned char *s = (const unsigned char *) (value != NULL ? value : "");
@@ -104,7 +107,7 @@ static inline void ds_json_commit(DsJson *j, size_t start) {
     if (j->overflow) j->len = start;
 }
 
-static inline void ds_json_int(DsJson *j, const char *key, long long value) {
+DS_JSON_OUTLINE void ds_json_int(DsJson *j, const char *key, long long value) {
     size_t start = ds_json_key(j, key);
     char text[24];
     size_t pos = sizeof(text);
@@ -118,19 +121,19 @@ static inline void ds_json_int(DsJson *j, const char *key, long long value) {
     ds_json_commit(j, start);
 }
 
-static inline void ds_json_bool(DsJson *j, const char *key, bool value) {
+DS_JSON_OUTLINE void ds_json_bool(DsJson *j, const char *key, bool value) {
     size_t start = ds_json_key(j, key);
     ds_json_put(j, value ? "true" : "false", value ? 4 : 5);
     ds_json_commit(j, start);
 }
 
-static inline void ds_json_str(DsJson *j, const char *key, const char *value) {
+DS_JSON_OUTLINE void ds_json_str(DsJson *j, const char *key, const char *value) {
     size_t start = ds_json_key(j, key);
     ds_json_quoted(j, value);
     ds_json_commit(j, start);
 }
 
-static inline void ds_json_obj_begin(DsJson *j, const char *key) {
+DS_JSON_OUTLINE void ds_json_obj_begin(DsJson *j, const char *key) {
     size_t start = ds_json_key(j, key);
     ds_json_putc(j, '{');
     ds_json_commit(j, start);
@@ -138,13 +141,13 @@ static inline void ds_json_obj_begin(DsJson *j, const char *key) {
     j->first = true;
 }
 
-static inline void ds_json_obj_end(DsJson *j) {
+DS_JSON_OUTLINE void ds_json_obj_end(DsJson *j) {
     if (j->depth > 0) ds_json_putc(j, '}');
     if (!j->overflow) j->depth = 0;
     j->first = false;
 }
 
-static inline void ds_json_begin(DsJson *j, char *buf, size_t cap, const char *event) {
+DS_JSON_OUTLINE void ds_json_begin(DsJson *j, char *buf, size_t cap, const char *event) {
     *j = (DsJson) {.buf = buf, .cap = cap, .first = true};
     ds_json_putc(j, '{');
     ds_json_int(j, "v", DS_JSON_SCHEMA_VERSION);
@@ -168,7 +171,7 @@ static inline size_t ds_json_finish(DsJson *j) {
 }
 
 /* One write(2) per line keeps lines intact on pipes up to PIPE_BUF. */
-static inline void ds_json_emit(DsJson *j, int fd) {
+DS_JSON_OUTLINE void ds_json_emit(DsJson *j, int fd) {
     size_t total = ds_json_finish(j);
     for (size_t done = 0; done < total;) {
         ssize_t count = write(fd, j->buf + done, total - done);
