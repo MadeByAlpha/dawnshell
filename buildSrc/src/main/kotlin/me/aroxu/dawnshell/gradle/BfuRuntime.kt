@@ -13,7 +13,7 @@ private val LINK_FLAGS = listOf("-Wl,-pie", "-Wl,-z,relro,-z,now", "-Wl,--gc-sec
 
 /**
  * Registers the source builds of every bundled native program for each ABI and returns the task that
- * assembles them into generated assets. Replaces scripts/build-bootstrap-runtime.sh.
+ * assembles them into generated assets.
  */
 fun Project.registerBfuRuntime(
     ndkDirectory: Provider<Directory>,

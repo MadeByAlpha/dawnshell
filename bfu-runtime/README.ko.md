@@ -23,12 +23,13 @@ ABI는 CPU에 맞는 네이티브 실행 파일 규칙입니다.
 - 고정 소스와 SHA-256: `sources/SOURCES.lock`
 - Android용 패치: `patches/`
 - 최소 빌드 설정: `config/`
-- 빌드 스크립트: `../scripts/build-bootstrap-runtime.sh`
+- 빌드 태스크: `../buildSrc/` (`BfuRuntime.kt`가 등록)
 - 서드파티 라이선스: [THIRD_PARTY_NOTICES.ko.md](THIRD_PARTY_NOTICES.ko.md)
 
 일반 사용자는 이 디렉터리의 파일을 휴대전화에 직접 복사할 필요가 없습니다. 앱이
 현재 ABI에 맞는 검증된 결과만 DE 저장소에 배치합니다. 소스를 바꿨다면 전체
-`scripts/build-all.sh`를 실행해 세 ABI와 라이선스 검사를 함께 통과시키세요.
+`./gradlew policyChecks :app:assembleDebug`를 실행해 세 ABI와 라이선스 검사를 함께
+통과시키세요. 바이너리는 빌드할 때 생성되며 커밋하지 않습니다.
 
 실제 기기의 키, PID(Process Identifier), 로그와 `authorized_keys`는 이 저장소에
 커밋하지 않습니다. 앱의 DE(Device Encrypted) 저장소 또는 검토된 Debian

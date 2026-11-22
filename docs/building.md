@@ -24,8 +24,11 @@ cd dawnshell
 
 export JAVA_HOME=/path/to/jdk17
 export ANDROID_HOME=/path/to/android-sdk
-export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.14206865"
 ```
+
+Install NDK `29.0.14206865` in the SDK (`sdkmanager "ndk;29.0.14206865"`). Gradle
+selects exactly that version through `ndkVersion`, so `ANDROID_NDK_HOME` is not
+needed.
 
 DawnShell does not depend on separate Termux repositories. BusyBox,
 `pkgdetails`, `gpgv`, debootstrap material, and the namespace launcher are built
@@ -34,23 +37,28 @@ from pinned source and patches in this repository.
 ## Full build
 
 ```sh
-./scripts/build-all.sh
+./gradlew clean policyChecks :app:lintDebug :app:testDebugUnitTest :app:stageDebugApk
 ```
 
-The script builds `armeabi-v7a`, `arm64-v8a`, and `x86_64` bootstrap runtimes,
-runs policy and bridge regressions, executes Android lint and unit tests, and
-copies the debug APK to `dist/`.
+Gradle builds the `armeabi-v7a`, `arm64-v8a`, and `x86_64` bootstrap runtimes
+(BusyBox, `pkgdetails`, `gpgv`, the namespace launcher, `dawnshell-fdguard`, and
+the codec client and worker) from the pinned sources with the tasks in
+`buildSrc/`, validates every ELF, and packages the result as generated assets.
+The binaries are not committed. Gradle then runs the policy and bridge
+regressions, Android lint and unit tests, and copies the debug APK to `dist/`.
+Unchanged native sources are reused from Gradle's up-to-date checks and build
+cache.
 
 Compilation defaults to `make -j"$(nproc)"`. Limit parallelism when necessary:
 
 ```sh
-DAWNSHELL_BUILD_JOBS=4 ./scripts/build-all.sh
+DAWNSHELL_BUILD_JOBS=4 ./gradlew assembleBfuRuntimeAssets
 ```
 
-For a local Android-only iteration after building identical native sources:
+For a local iteration on one ABI:
 
 ```sh
-DAWNSHELL_SKIP_BOOTSTRAP_SOURCE_BUILD=1 ./scripts/build-all.sh
+./gradlew -PdawnshellBfuAbis=arm64-v8a :app:assembleDebug
 ```
 
 Do not use that shortcut as release evidence. The normal output is:
@@ -60,6 +68,11 @@ dist/dawnshell-app_v<version>+debug.apk
 ```
 
 ## Individual checks
+
+`./gradlew policyChecks` runs the scripts below (also part of `./gradlew check`).
+Each script can still be run on its own; `test-hardware-codec-bridge.sh` and
+`test-kernel-quirk-guards.sh` inspect the built binaries, so run
+`./gradlew assembleBfuRuntimeAssets` first.
 
 ```sh
 ./scripts/test-release-compliance.sh
