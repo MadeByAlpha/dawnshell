@@ -31,8 +31,10 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.Executors
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.aroxu.dawnshell.ui.DawnShellTheme
 
 internal class BootActivity : AppCompatActivity(), BootActions {
@@ -108,14 +110,32 @@ internal class BootActivity : AppCompatActivity(), BootActions {
         }
     }
 
-    private fun refreshLiveStatus() {
-        refreshRootAuthorizationStatus()
-        refreshInstallerStatus()
-        refreshSystemConfigurationStatus()
-        refreshLifecycleStatus()
-        refreshDockerPolicyStatus()
-        refreshHardwareCodecStatus()
-        refreshHardwareCodecLongRunStatus()
+    private class LiveStatus(
+        val rootAuthorization: String,
+        val installer: StatusLoad,
+        val systemConfig: StatusLoad,
+        val lifecycle: StatusLoad,
+        val dockerPolicy: StatusLoad,
+        val hardwareCodec: StatusLoad,
+        val hardwareCodecLongRun: StatusLoad,
+    )
+
+    /** Reads the status files off the main thread; only the state assignment runs on it. */
+    private suspend fun refreshLiveStatus() {
+        val live = withContext(Dispatchers.IO) {
+            LiveStatus(
+                readRootAuthorizationStatus(), readInstallerStatus(), readSystemConfigurationStatus(),
+                readLifecycleStatus(), readDockerPolicyStatus(), readHardwareCodecStatus(),
+                readHardwareCodecLongRunStatus(),
+            )
+        }
+        if (!state.rootAuthorizationInProgress) state.rootAuthorizationStatus = live.rootAuthorization
+        state.installStatus = live.installer
+        state.systemConfigStatus = live.systemConfig
+        state.lifecycleStatus = live.lifecycle
+        state.dockerPolicyStatus = live.dockerPolicy
+        state.hardwareCodecStatus = live.hardwareCodec
+        state.hardwareCodecLongRunStatus = live.hardwareCodecLongRun
     }
 
     // Dialogs
@@ -551,13 +571,15 @@ internal class BootActivity : AppCompatActivity(), BootActions {
 
     private fun refreshRootAuthorizationStatus() {
         if (state.rootAuthorizationInProgress) return
-        state.rootAuthorizationStatus = try {
-            val result = BfuRootAuthorization.readLastPersistentResult(this)
-                .ifEmpty { getString(R.string.bfu_root_authorization_none) }
-            getString(R.string.bfu_root_authorization_status, result)
-        } catch (e: IOException) {
-            getString(R.string.bfu_root_authorization_read_failed, e.message)
-        }
+        state.rootAuthorizationStatus = readRootAuthorizationStatus()
+    }
+
+    private fun readRootAuthorizationStatus(): String = try {
+        val result = BfuRootAuthorization.readLastPersistentResult(this)
+            .ifEmpty { getString(R.string.bfu_root_authorization_none) }
+        getString(R.string.bfu_root_authorization_status, result)
+    } catch (e: IOException) {
+        getString(R.string.bfu_root_authorization_read_failed, e.message)
     }
 
     private fun packagesForUid(uid: Int): String {
@@ -1070,28 +1092,40 @@ internal class BootActivity : AppCompatActivity(), BootActions {
     }
 
     private fun refreshSystemConfigurationStatus() {
-        state.systemConfigStatus = loadStatus { DebianSystemProvisioner.readOperationStatus(this) }
+        state.systemConfigStatus = readSystemConfigurationStatus()
     }
+
+    private fun readSystemConfigurationStatus() = loadStatus { DebianSystemProvisioner.readOperationStatus(this) }
 
     private fun refreshLifecycleStatus() {
-        state.lifecycleStatus = loadStatus { DebianLauncher.readOperationStatus(this) }
+        state.lifecycleStatus = readLifecycleStatus()
     }
+
+    private fun readLifecycleStatus() = loadStatus { DebianLauncher.readOperationStatus(this) }
 
     private fun refreshDockerPolicyStatus() {
-        state.dockerPolicyStatus = loadStatus { DockerNetworkProvisioner.readOperationStatus(this) }
+        state.dockerPolicyStatus = readDockerPolicyStatus()
     }
+
+    private fun readDockerPolicyStatus() = loadStatus { DockerNetworkProvisioner.readOperationStatus(this) }
 
     private fun refreshHardwareCodecStatus() {
-        state.hardwareCodecStatus = loadStatus { HardwareCodecProbe.readOperationStatus(this) }
+        state.hardwareCodecStatus = readHardwareCodecStatus()
     }
+
+    private fun readHardwareCodecStatus() = loadStatus { HardwareCodecProbe.readOperationStatus(this) }
 
     private fun refreshHardwareCodecLongRunStatus() {
-        state.hardwareCodecLongRunStatus = loadStatus { HardwareCodecLongRun.readOperationStatus(this) }
+        state.hardwareCodecLongRunStatus = readHardwareCodecLongRunStatus()
     }
 
+    private fun readHardwareCodecLongRunStatus() = loadStatus { HardwareCodecLongRun.readOperationStatus(this) }
+
     private fun refreshInstallerStatus() {
-        state.installStatus = loadStatus { DebianRootfsInstaller.readOperationStatus(this) }
+        state.installStatus = readInstallerStatus()
     }
+
+    private fun readInstallerStatus() = loadStatus { DebianRootfsInstaller.readOperationStatus(this) }
 
     private fun recordOperation(message: String) {
         try {
