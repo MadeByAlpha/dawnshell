@@ -16,9 +16,6 @@ import java.nio.charset.StandardCharsets;
 final class BfuDebianRuntimeProbe {
 
     private static final long PROBE_TIMEOUT_MS = 35_000L;
-    private static final String SUCCESS_MARKER = "BFU_DEBIAN_NAMESPACE_OK";
-    private static final String COMPAT_SUCCESS_MARKER =
-            "BFU_DEBIAN_COMPATIBILITY_OK";
     private static final String LOG_FILE = "bfu-debian-runtime.log";
 
     static final class Result {
@@ -72,15 +69,14 @@ final class BfuDebianRuntimeProbe {
                 ? "probe-compat" : "probe";
         String shellCommand = BfuSu.shellQuote(layout.namespaceProbeBinary.getAbsolutePath())
                 + " " + operation + " " + BfuSu.shellQuote(BfuRootfsProbe.ROOTFS_PATH);
-        BfuSu.Result commandResult = BfuSu.run(shellCommand, PROBE_TIMEOUT_MS);
+        BfuSu.Result commandResult = BfuSu.runRaw(shellCommand, PROBE_TIMEOUT_MS);
         boolean userUnlockedAfter = isUserUnlocked(context);
-        String marker = fallbackAllowed ? COMPAT_SUCCESS_MARKER : SUCCESS_MARKER;
         boolean successful = commandResult.exitedSuccessfully()
-                && commandResult.output.contains(marker);
+                && NativeOutput.has(commandResult.output, fallbackAllowed ? "compat_ok" : "namespace_ok");
         Result result = new Result(successful, commandResult.command,
                 commandResult.exitCode, commandResult.timedOut, userUnlockedBefore,
                 userUnlockedAfter, fallbackAllowed ? "compat" : "systemd",
-                commandResult.output);
+                BfuSu.sanitize(commandResult.output));
         appendPersistentResult(deContext, result);
         return result;
     }

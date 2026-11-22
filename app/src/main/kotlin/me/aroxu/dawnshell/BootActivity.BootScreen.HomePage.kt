@@ -17,6 +17,7 @@ import androidx.compose.material3.DropdownMenuPopup
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Text
@@ -43,43 +44,75 @@ internal fun HomePage(s: BootUiState, a: BootActions) {
                 SectionTitle(stringResource(R.string.dawnshell_section_runtime))
                 Small(stringResource(R.string.dawnshell_section_runtime_description), Modifier.padding(top = 4.dp))
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IconButton(onClick = {
-                    a.openLog(DawnShellLogRepository.LIFECYCLE)
-                }) {
+            Box {
+                var expanded by remember { mutableStateOf(false) }
+
+                IconButton(onClick = { expanded = !expanded }) {
                     Icon(
-                        painterResource(R.drawable.ic_logs_24),
-                        stringResource(R.string.dawnshell_view_runtime_log)
+                        painterResource(R.drawable.ic_more_vert_24),
+                        stringResource(androidx.appcompat.R.string.abc_action_menu_overflow_description),
                     )
                 }
-                IconButton(onClick = {
-                    a.requestLifecycle(DebianLauncher.Operation.STATUS)
-                }) {
-                    Icon(
-                        painterResource(R.drawable.ic_refresh_24),
-                        stringResource(R.string.bfu_status_debian_short)    // TODO: Add proper string resource
-                    )
+                DropdownMenuPopup(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    DropdownMenuGroup(
+                        shapes = MenuDefaults.groupShapes()
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.bfu_status_debian_short)) },
+                            onClick = {
+                                expanded = false
+                                a.requestLifecycle(DebianLauncher.Operation.STATUS)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.dawnshell_view_runtime_log)) },
+                            onClick = {
+                                expanded = false
+                                a.openLog(DawnShellLogRepository.LIFECYCLE)
+                            },
+                        )
+                        HorizontalDivider(Modifier.padding(MenuDefaults.HorizontalDividerPadding))
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.bfu_force_stop_debian_short)) },
+                            onClick = {
+                                expanded = false
+                                a.confirmForceStop()
+                            },
+                        )
+                    }
                 }
             }
         }
 
-        // TODO: Rewrite this
+        val status = s.lifecycleStatus as? StatusLoad.Loaded
         TerminalPanel(Modifier.fillMaxWidth().padding(top = 14.dp)) {
-            Text(s.lifecycleStatus, Modifier.padding(14.dp), style = consoleTextStyle(), maxLines = 5)
+            Text(
+                s.lifecycleStatus.text(
+                    R.string.bfu_lifecycle_status_none,
+                    R.string.bfu_lifecycle_status,
+                    R.string.bfu_lifecycle_status_failed,
+                    420,
+                ),
+                Modifier.padding(14.dp), style = consoleTextStyle(), maxLines = 5)
         }
         Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DawnShellButton(
-                stringResource(R.string.bfu_start_debian_short),
-                { a.requestLifecycle(DebianLauncher.Operation.START) }, Modifier.weight(1f), filled = true,
-            )
-            DawnShellButton(stringResource(R.string.bfu_restart_debian_short), a::confirmRestart, Modifier.weight(1f))
-        }
-        Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DawnShellButton(
-                stringResource(R.string.bfu_force_stop_debian_short), a::confirmForceStop,
-                Modifier.weight(1f), contentColor = MaterialTheme.colorScheme.error,
-            )
-            DawnShellButton(stringResource(R.string.bfu_stop_debian_short), a::confirmStop, Modifier.weight(1f))
+            if (status != null)
+                DawnShellButton(
+                    stringResource(R.string.bfu_stop_debian_short),
+                    a::confirmStop, Modifier.weight(1f), filled = true,
+                )
+            else
+                DawnShellButton(
+                    stringResource(R.string.bfu_start_debian_short),
+                    { a.requestLifecycle(DebianLauncher.Operation.START) }, Modifier.weight(1f), filled = true,
+                )
+            IconButton(a::confirmRestart, shape = IconButtonDefaults.outlinedShape) {
+                Icon(
+                    painterResource(R.drawable.ic_refresh_24),
+                    contentDescription = stringResource(R.string.bfu_restart_debian_short),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 
@@ -137,7 +170,7 @@ private fun SshAccessCard(s: BootUiState, a: BootActions) {
             Row(Modifier.fillMaxWidth().padding(10.dp), Arrangement.spacedBy(8.dp), Alignment.Bottom) {
                 SelectionContainer(Modifier.weight(1f)) {
                     // TODO: Change to ssh connection command
-                    Text(s.generatedPublicKey, Modifier.padding(14.dp), style = consoleTextStyle())
+                    Text(a.buildSshConnectCommand(), Modifier.padding(14.dp), style = consoleTextStyle())
                 }
                 IconButton(
                     onClick = { a.copySshConnectCommand() },

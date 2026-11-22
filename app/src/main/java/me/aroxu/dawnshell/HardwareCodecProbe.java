@@ -158,9 +158,13 @@ final class HardwareCodecProbe {
         }
     }
 
+    static OperationStatus readOperationStatus(Context context) throws IOException {
+        return StatusStore.read(file(BfuPreferences.deviceProtectedContext(context), STATUS_FILE));
+    }
+
     static String readStatus(Context context) throws IOException {
-        return readSmallFile(file(BfuPreferences.deviceProtectedContext(context),
-                STATUS_FILE), 16 * 1024);
+        OperationStatus status = readOperationStatus(context);
+        return status == null ? "" : status.text();
     }
 
     static String readCapabilities(Context context) throws IOException {
@@ -378,7 +382,7 @@ final class HardwareCodecProbe {
 
     private static void writeStatus(Context context, String value) {
         try {
-            writeAtomic(file(context, STATUS_FILE), clean(value) + "\n");
+            StatusStore.write(file(context, STATUS_FILE), clean(value));
         } catch (IOException | RuntimeException e) {
             Log.e(TAG, "Could not persist MediaCodec status", e);
         }

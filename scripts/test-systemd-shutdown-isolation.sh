@@ -129,12 +129,12 @@ initial_boot_id="$(android_boot_id)"
 status_output="$(timeout 20 adb shell su -c \
   "$helper status $rootfs $control" | tr -d '\r')"
 printf '%s\n' "$status_output"
-grep -Fq 'BFU_DEBIAN_RUNNING' <<<"$status_output"
-grep -Fq 'supervisor_identity_valid=true' <<<"$status_output"
-grep -Fq 'init_identity_valid=true' <<<"$status_output"
-grep -Fq 'namespace_topology_valid=true' <<<"$status_output"
-grep -Fq 'ipc_namespace=android-shared' <<<"$status_output"
-grep -Fq 'network_namespace=android-shared network_mode=shared-nic' <<<"$status_output"
+grep -Fq '"event":"running"' <<<"$status_output"
+grep -Fq '"supervisor_identity_valid":true' <<<"$status_output"
+grep -Fq '"init_identity_valid":true' <<<"$status_output"
+grep -Fq '"namespace_topology_valid":true' <<<"$status_output"
+grep -Fq '"ipc_namespace":"android-shared"' <<<"$status_output"
+grep -Fq '"network_namespace":"android-shared","network_mode":"shared-nic"' <<<"$status_output"
 
 echo "Testing explicit restart-debian helper..."
 restart_output="$(timeout 80 adb shell su -c \
@@ -160,12 +160,12 @@ lifecycle_before_stop="$(adb exec-out run-as me.aroxu.dawnshell \
 stop_output="$(timeout 45 adb shell su -c \
   "$helper stop $rootfs $control" | tr -d '\r')"
 printf '%s\n' "$stop_output"
-grep -Fq 'BFU_DEBIAN_STOPPED' <<<"$stop_output"
+grep -Fq '"event":"stopped"' <<<"$stop_output"
 stopped_status="$(timeout 20 adb shell su -c \
   "$helper status $rootfs $control" | tr -d '\r')"
 printf '%s\n' "$stopped_status"
-grep -Fq 'last_state=stopped' <<<"$stopped_status"
-grep -Fq 'wait_status=0' <<<"$stopped_status"
+grep -Fq '"last_state":"stopped"' <<<"$stopped_status"
+grep -Fq '"wait_status":0' <<<"$stopped_status"
 grep -Fq 'systemd_manager_exit_queued' \
   < <(adb exec-out run-as me.aroxu.dawnshell cat "$lifecycle_log" 2>/dev/null \
       | tr -d '\r')
@@ -224,7 +224,7 @@ for mode in poweroff reboot shutdown; do
     exit 5
   fi
 
-  grep -Fq "BFU_DEBIAN_SHUTDOWN_TEST_COMPLETED mode=$mode" <<<"$output" || {
+  grep -Fq "\"event\":\"shutdown_test_completed\",\"mode\":\"$mode\"" <<<"$output" || {
     echo "FAIL: helper did not prove the Debian supervisor stopped" >&2
     exit 5
   }

@@ -71,6 +71,15 @@ internal sealed interface BootDialog {
     ) : BootDialog
 }
 
+/** Latest persisted status of one background operation, as read from its *.status file. */
+internal sealed interface StatusLoad {
+    data object Missing : StatusLoad
+
+    data class Loaded(val status: OperationStatus) : StatusLoad
+
+    data class Failed(val reason: String?) : StatusLoad
+}
+
 internal class BootUiState {
     var enableBfu by mutableStateOf(false)
     var allowCeReadableBfu by mutableStateOf(false)
@@ -87,14 +96,13 @@ internal class BootUiState {
     var appliedSettings by mutableStateOf<SettingsSnapshot?>(null)
 
     var rootAuthorizationStatus by mutableStateOf("")
-    var installStatus by mutableStateOf("")
-    var systemConfigStatus by mutableStateOf("")
-    var lifecycleStatus by mutableStateOf("")
-    var dockerPolicyStatus by mutableStateOf("")
-    var hardwareCodecStatus by mutableStateOf("")
-    var hardwareCodecLongRunStatus by mutableStateOf("")
+    var installStatus by mutableStateOf<StatusLoad>(StatusLoad.Missing)
+    var systemConfigStatus by mutableStateOf<StatusLoad>(StatusLoad.Missing)
+    var lifecycleStatus by mutableStateOf<StatusLoad>(StatusLoad.Missing)
+    var dockerPolicyStatus by mutableStateOf<StatusLoad>(StatusLoad.Missing)
+    var hardwareCodecStatus by mutableStateOf<StatusLoad>(StatusLoad.Missing)
+    var hardwareCodecLongRunStatus by mutableStateOf<StatusLoad>(StatusLoad.Missing)
     var probeSummary by mutableStateOf("")
-    var generatedPublicKey by mutableStateOf("")
 
     var rootAuthorizationInProgress by mutableStateOf(false)
     var passwordUpdateInProgress by mutableStateOf(false)

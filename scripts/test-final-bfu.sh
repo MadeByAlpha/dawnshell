@@ -163,11 +163,11 @@ for ((cycle = 1; cycle <= cycles; cycle++)); do
   control="/data/user_de/0/me.aroxu.dawnshell/files/bfu/run"
   launcher_status="$(adb shell su -c \
     "$helper status $rootfs $control" | tr -d '\r')"
-  grep -Fq 'BFU_DEBIAN_RUNNING' <<<"$launcher_status"
-  grep -Fq 'namespace_topology_valid=true' <<<"$launcher_status"
-  grep -Fq 'ipc_namespace=android-shared' <<<"$launcher_status"
-  grep -Fq 'network_namespace=android-shared network_mode=shared-nic' <<<"$launcher_status"
-  grep -Eq 'cgroup_mode=(v1|v2)' <<<"$launcher_status"
+  grep -Fq '"event":"running"' <<<"$launcher_status"
+  grep -Fq '"namespace_topology_valid":true' <<<"$launcher_status"
+  grep -Fq '"ipc_namespace":"android-shared"' <<<"$launcher_status"
+  grep -Fq '"network_namespace":"android-shared","network_mode":"shared-nic"' <<<"$launcher_status"
+  grep -Eq '"cgroup_mode":"(v1|v2)"' <<<"$launcher_status"
   device_helper_hash="$(adb exec-out run-as me.aroxu.dawnshell cat "$helper" \
     | sha256sum | awk '{print toupper($1)}')"
   [[ "$device_helper_hash" = "$embedded_helper_hash" ]] || {

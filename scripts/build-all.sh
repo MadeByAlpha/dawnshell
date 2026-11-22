@@ -34,6 +34,7 @@ fi
 "$root_dir/scripts/test-host-reboot-isolation.sh"
 "$root_dir/scripts/test-rootfs-path-resolution.sh"
 "$root_dir/scripts/test-lifecycle-control-policy.sh"
+"$root_dir/scripts/test-native-output.sh"
 "$root_dir/scripts/test-documentation.sh"
 "$root_dir/gradlew" -p "$root_dir" \
   clean :app:assembleDebug :app:lintDebug :app:testDebugUnitTest

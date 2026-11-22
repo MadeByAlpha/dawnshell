@@ -122,6 +122,10 @@
     <string name="bfu_lifecycle_requested">Debian control request sent: %1$s</string>
     <string name="bfu_lifecycle_request_failed">Could not request Debian lifecycle operation: %1$s</string>
     <string name="bfu_lifecycle_status">Debian systemd lifecycle status:\n%1$s</string>
+    <string name="bfu_lifecycle_running_detail">%1$s · %2$s · init PID %3$d · cgroup %4$s · USB %5$s</string>
+    <string name="bfu_lifecycle_stopped_detail">%1$s · stopped (last state: %2$s)</string>
+    <string name="bfu_lifecycle_health_ok">healthy</string>
+    <string name="bfu_lifecycle_health_bad">unhealthy</string>
     <string name="bfu_lifecycle_status_none">No Debian lifecycle operation has been recorded yet.</string>
     <string name="bfu_lifecycle_status_failed">Failed to read Debian lifecycle status: %1$s</string>
     <string name="bfu_lifecycle_log_title">Debian systemd lifecycle log (live, newest 64 KiB):</string>

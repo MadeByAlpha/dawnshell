@@ -109,19 +109,8 @@ final class HardwareCodecFileSelfTest {
     }
 
     static String readStatus(Context context) throws IOException {
-        File file = new File(directory(BfuPreferences.deviceProtectedContext(context)),
-                STATUS_FILE);
-        if (!file.isFile()) return "";
-        byte[] data = new byte[(int) Math.min(file.length(), 16 * 1024L)];
-        try (FileInputStream input = new FileInputStream(file)) {
-            int offset = 0;
-            while (offset < data.length) {
-                int count = input.read(data, offset, data.length - offset);
-                if (count < 0) break;
-                offset += count;
-            }
-            return new String(data, 0, offset, StandardCharsets.UTF_8).trim();
-        }
+        return StatusStore.readText(new File(
+                directory(BfuPreferences.deviceProtectedContext(context)), STATUS_FILE));
     }
 
     static File inputFile(Context context) throws IOException {
@@ -267,7 +256,7 @@ final class HardwareCodecFileSelfTest {
 
     private static void writeStatus(Context context, String value) {
         try {
-            writeAtomic(new File(directory(context), STATUS_FILE), value + "\n");
+            StatusStore.write(new File(directory(context), STATUS_FILE), value);
         } catch (IOException e) {
             HardwareCodecProbe.recordRuntimeEvent(context,
                     "FILE_SELF_TEST_STATUS_WRITE_FAILED error=" + clean(e.getMessage()));

@@ -287,13 +287,13 @@ grep -Fq 'trigger=locked_boot' <<<"$lifecycle_status"
 grep -Fq 'user_unlocked_before=false' <<<"$lifecycle_status"
 grep -Fq 'user_unlocked_after=false' <<<"$lifecycle_status"
 grep -Fq 'health_exit=0' <<<"$lifecycle_status"
-grep -Fq 'system_state=running' <<<"$lifecycle_status"
-grep -Fq 'dbus_bus=ok' <<<"$lifecycle_status"
-grep -Fq 'boot_proof_service=active' <<<"$lifecycle_status"
-grep -Fq 'boot_proof_marker=present' <<<"$lifecycle_status"
-grep -Fq 'target_state=active' <<<"$lifecycle_status"
-grep -Fq 'listen_22=true' <<<"$lifecycle_status"
-grep -Fq 'cgroup_delegation=delegated' <<<"$lifecycle_status"
+grep -Fq '"system_state":"running"' <<<"$lifecycle_status"
+grep -Fq '"dbus_bus":"ok"' <<<"$lifecycle_status"
+grep -Fq '"boot_proof_service":"active"' <<<"$lifecycle_status"
+grep -Fq '"boot_proof_marker":"present"' <<<"$lifecycle_status"
+grep -Fq '"target_state":"active"' <<<"$lifecycle_status"
+grep -Fq '"listen_22":true' <<<"$lifecycle_status"
+grep -Fq '"cgroup_delegation":"delegated"' <<<"$lifecycle_status"
 
 locked_boot_new="$(fresh_log_lines "$locked_boot_log_path" "$locked_boot_before")"
 printf '%s\n' "$locked_boot_new"
@@ -321,9 +321,9 @@ require_one_fresh_record "BFU namespace/chroot probe" \
   'DEBIAN_RUNTIME_PROBE ' "$runtime_new"
 grep -Fq 'exit=0 timeout=false namespace_chroot=true' <<<"$runtime_new"
 grep -Fq 'user_unlocked_before=false user_unlocked_after=false' <<<"$runtime_new"
-grep -Fq "BFU_DEBIAN_NAMESPACE_OK pid=1 proc1=sh arch=$debian_arch debian=13" \
+grep -Fq "\"event\":\"namespace_ok\",\"pid\":1,\"proc1\":\"sh\",\"arch\":\"$debian_arch\",\"debian\":13" \
   <<<"$runtime_new"
-grep -Fq 'init=present systemctl=present' <<<"$runtime_new"
+grep -Fq '"init":"present","systemctl":"present"' <<<"$runtime_new"
 
 operation_all="$(read_boot_de_file "$operation_log_path")"
 operation_new="$(printf '%s\n' "$operation_all" \

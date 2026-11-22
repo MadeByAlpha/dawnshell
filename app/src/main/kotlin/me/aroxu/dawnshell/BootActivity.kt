@@ -31,8 +31,10 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.Executors
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.aroxu.dawnshell.ui.DawnShellTheme
 
 internal class BootActivity : AppCompatActivity(), BootActions {
@@ -108,14 +110,32 @@ internal class BootActivity : AppCompatActivity(), BootActions {
         }
     }
 
-    private fun refreshLiveStatus() {
-        refreshRootAuthorizationStatus()
-        refreshInstallerStatus()
-        refreshSystemConfigurationStatus()
-        refreshLifecycleStatus()
-        refreshDockerPolicyStatus()
-        refreshHardwareCodecStatus()
-        refreshHardwareCodecLongRunStatus()
+    private class LiveStatus(
+        val rootAuthorization: String,
+        val installer: StatusLoad,
+        val systemConfig: StatusLoad,
+        val lifecycle: StatusLoad,
+        val dockerPolicy: StatusLoad,
+        val hardwareCodec: StatusLoad,
+        val hardwareCodecLongRun: StatusLoad,
+    )
+
+    /** Reads the status files off the main thread; only the state assignment runs on it. */
+    private suspend fun refreshLiveStatus() {
+        val live = withContext(Dispatchers.IO) {
+            LiveStatus(
+                readRootAuthorizationStatus(), readInstallerStatus(), readSystemConfigurationStatus(),
+                readLifecycleStatus(), readDockerPolicyStatus(), readHardwareCodecStatus(),
+                readHardwareCodecLongRunStatus(),
+            )
+        }
+        if (!state.rootAuthorizationInProgress) state.rootAuthorizationStatus = live.rootAuthorization
+        state.installStatus = live.installer
+        state.systemConfigStatus = live.systemConfig
+        state.lifecycleStatus = live.lifecycle
+        state.dockerPolicyStatus = live.dockerPolicy
+        state.hardwareCodecStatus = live.hardwareCodec
+        state.hardwareCodecLongRunStatus = live.hardwareCodecLongRun
     }
 
     // Dialogs
@@ -166,6 +186,7 @@ internal class BootActivity : AppCompatActivity(), BootActions {
 
     // SSH access
 
+    /*
     private fun refreshGeneratedSshIdentity(provisionPublicKey: Boolean) {
         state.generatedPublicKey = try {
             val identity = BfuSshClientKeyStore.ensure(this)
@@ -178,6 +199,7 @@ internal class BootActivity : AppCompatActivity(), BootActions {
             getString(R.string.bfu_generated_key_failed, e.message)
         }
     }
+     */
 
     override fun confirmRotateSshKey() {
         if (!isUserUnlocked()) {
@@ -197,7 +219,7 @@ internal class BootActivity : AppCompatActivity(), BootActions {
             val identity = BfuSshClientKeyStore.generateAndReplace(this)
             val layout = BfuRuntime.provision(this)
             BfuAuthorizedKeys.validateAndSave(layout, identity.publicKey)
-            state.generatedPublicKey = identity.publicKey
+            //state.generatedPublicKey = identity.publicKey
             recordOperation("SSH_CLIENT_KEY_ROTATED algorithm=ed25519 de_public_key_updated=true")
             state.dialogs += BootDialog.Notice(
                 getString(R.string.bfu_rotate_ssh_key_done_message),
@@ -263,7 +285,7 @@ internal class BootActivity : AppCompatActivity(), BootActions {
             "printf 'Imported DawnShell client key: %s\\n' \"\$KEY\""
     }
 
-    private fun buildSshConnectCommand() =
+    override fun buildSshConnectCommand() =
         "ssh -i \"\$HOME/.ssh/dawnshell-ed25519\" -p 22 " +
             "-o IdentitiesOnly=yes -o PasswordAuthentication=no " +
             "-o StrictHostKeyChecking=accept-new " +
@@ -304,7 +326,7 @@ internal class BootActivity : AppCompatActivity(), BootActions {
         state.hardwareCodec = BfuPreferences.hardwareCodecBridge(this)
         state.selectUsbMode(BfuPreferences.usbPassthroughMode(this))
         state.usbDeviceIds.setTextAndPlaceCursorAtEnd(BfuPreferences.usbExclusiveDeviceIds(this))
-        refreshGeneratedSshIdentity(true)
+        //refreshGeneratedSshIdentity(true)
         refreshRootAuthorizationStatus()
         refreshProbeStatus(false)
         refreshInstallerStatus()
@@ -549,13 +571,15 @@ internal class BootActivity : AppCompatActivity(), BootActions {
 
     private fun refreshRootAuthorizationStatus() {
         if (state.rootAuthorizationInProgress) return
-        state.rootAuthorizationStatus = try {
-            val result = BfuRootAuthorization.readLastPersistentResult(this)
-                .ifEmpty { getString(R.string.bfu_root_authorization_none) }
-            getString(R.string.bfu_root_authorization_status, result)
-        } catch (e: IOException) {
-            getString(R.string.bfu_root_authorization_read_failed, e.message)
-        }
+        state.rootAuthorizationStatus = readRootAuthorizationStatus()
+    }
+
+    private fun readRootAuthorizationStatus(): String = try {
+        val result = BfuRootAuthorization.readLastPersistentResult(this)
+            .ifEmpty { getString(R.string.bfu_root_authorization_none) }
+        getString(R.string.bfu_root_authorization_status, result)
+    } catch (e: IOException) {
+        getString(R.string.bfu_root_authorization_read_failed, e.message)
     }
 
     private fun packagesForUid(uid: Int): String {
@@ -1059,72 +1083,49 @@ internal class BootActivity : AppCompatActivity(), BootActions {
 
     // Status lines
 
-    private inline fun statusLine(
-        @StringRes none: Int,
-        @StringRes format: Int,
-        maximumLength: Int,
-        @StringRes failed: Int,
-        read: () -> String,
-    ): String = try {
-        getString(format, compact(read().ifEmpty { getString(none) }, maximumLength))
+    private inline fun loadStatus(read: () -> OperationStatus?): StatusLoad = try {
+        read()?.let(StatusLoad::Loaded) ?: StatusLoad.Missing
     } catch (e: IOException) {
-        getString(failed, e.message)
-    }
-
-    private inline fun codecStatusLine(
-        @StringRes none: Int,
-        @StringRes format: Int,
-        @StringRes failed: Int,
-        read: () -> String,
-    ): String = try {
-        getString(format, compact(read().ifEmpty { getString(none) }, 520))
-    } catch (e: IOException) {
-        getString(failed, BfuSu.sanitize(e.message))
+        StatusLoad.Failed(BfuSu.sanitize(e.message))
     } catch (e: RuntimeException) {
-        getString(failed, BfuSu.sanitize(e.message))
+        StatusLoad.Failed(BfuSu.sanitize(e.message))
     }
 
     private fun refreshSystemConfigurationStatus() {
-        state.systemConfigStatus = statusLine(
-            R.string.bfu_system_config_status_none, R.string.bfu_system_config_status, 360,
-            R.string.bfu_system_config_status_failed,
-        ) { DebianSystemProvisioner.readStatus(this) }
+        state.systemConfigStatus = readSystemConfigurationStatus()
     }
+
+    private fun readSystemConfigurationStatus() = loadStatus { DebianSystemProvisioner.readOperationStatus(this) }
 
     private fun refreshLifecycleStatus() {
-        state.lifecycleStatus = statusLine(
-            R.string.bfu_lifecycle_status_none, R.string.bfu_lifecycle_status, 420,
-            R.string.bfu_lifecycle_status_failed,
-        ) { DebianLauncher.readStatus(this) }
+        state.lifecycleStatus = readLifecycleStatus()
     }
+
+    private fun readLifecycleStatus() = loadStatus { DebianLauncher.readOperationStatus(this) }
 
     private fun refreshDockerPolicyStatus() {
-        state.dockerPolicyStatus = statusLine(
-            R.string.dawnshell_docker_policy_status_none, R.string.dawnshell_docker_policy_status, 420,
-            R.string.dawnshell_docker_policy_status_failed,
-        ) { DockerNetworkProvisioner.readStatus(this) }
+        state.dockerPolicyStatus = readDockerPolicyStatus()
     }
+
+    private fun readDockerPolicyStatus() = loadStatus { DockerNetworkProvisioner.readOperationStatus(this) }
 
     private fun refreshHardwareCodecStatus() {
-        state.hardwareCodecStatus = codecStatusLine(
-            R.string.dawnshell_codec_status_none, R.string.dawnshell_codec_status,
-            R.string.dawnshell_codec_status_failed,
-        ) { HardwareCodecProbe.readStatus(this) }
+        state.hardwareCodecStatus = readHardwareCodecStatus()
     }
+
+    private fun readHardwareCodecStatus() = loadStatus { HardwareCodecProbe.readOperationStatus(this) }
 
     private fun refreshHardwareCodecLongRunStatus() {
-        state.hardwareCodecLongRunStatus = codecStatusLine(
-            R.string.dawnshell_codec_long_run_status_none, R.string.dawnshell_codec_long_run_status,
-            R.string.dawnshell_codec_long_run_status_failed,
-        ) { HardwareCodecLongRun.readStatus(this) }
+        state.hardwareCodecLongRunStatus = readHardwareCodecLongRunStatus()
     }
 
+    private fun readHardwareCodecLongRunStatus() = loadStatus { HardwareCodecLongRun.readOperationStatus(this) }
+
     private fun refreshInstallerStatus() {
-        state.installStatus = statusLine(
-            R.string.bfu_debian_install_status_none, R.string.bfu_debian_install_status, 360,
-            R.string.bfu_debian_install_status_failed,
-        ) { DebianRootfsInstaller.readStatus(this) }
+        state.installStatus = readInstallerStatus()
     }
+
+    private fun readInstallerStatus() = loadStatus { DebianRootfsInstaller.readOperationStatus(this) }
 
     private fun recordOperation(message: String) {
         try {

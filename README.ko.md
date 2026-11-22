@@ -152,6 +152,7 @@ export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.14206865"
 - [Debian rootfs 설치 과정](docs/rootfs-installation.ko.md)
 - [Debian systemd와 SSH](docs/debian-systemd.ko.md)
 - [하드웨어 코덱 worker 프로토콜](docs/hardware-codec-protocol.ko.md)
+- [네이티브 출력 스키마](docs/native-output-schema.ko.md)
 - [하드웨어 코덱 구현 결정 기록](docs/media-codec-bridge-plan.ko.md)
 - [빌드와 배포](docs/building.ko.md)
 - [내장 부트스트랩 런타임](bfu-runtime/README.ko.md)

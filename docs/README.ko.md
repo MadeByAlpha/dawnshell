@@ -71,6 +71,7 @@ DawnShell을 처음 설치하는 사용자부터 내부 구조를 검토하는 �
 | [Debian rootfs 설치 과정](rootfs-installation.ko.md) | 내장 부트스트랩 도구, 서명·해시 검증, 원자적 게시, 실패 보존 |
 | [Debian systemd와 SSH](debian-systemd.ko.md) | 런타임 mount, PID 1, 네트워크, SSH 정책, 종료와 재시작 |
 | [하드웨어 코덱 worker 프로토콜](hardware-codec-protocol.ko.md) | `memfd`/`eventfd`, 메시지 형식, 하드웨어 선택, 제한값 |
+| [네이티브 출력 스키마](native-output-schema.ko.md) | 네이티브 헬퍼의 JSON Lines 이벤트와 `*.status` 파일 형식 |
 | [하드웨어 코덱 구현 결정 기록](media-codec-bridge-plan.ko.md) | 최종 구조를 선택한 이유와 비목표를 기록한 설계 결정 문서 |
 | [빌드와 배포](building.ko.md) | 로컬 빌드, 병렬 작업 수, CI, 서명, Release 구성 |
 
