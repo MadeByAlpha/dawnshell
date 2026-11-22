@@ -176,8 +176,13 @@ final class DebianLauncher {
         return new HealthOutcome(false, attempts, result);
     }
 
+    static OperationStatus readOperationStatus(Context context) throws IOException {
+        return StatusStore.read(statusFile(context));
+    }
+
     static String readStatus(Context context) throws IOException {
-        return StatusStore.readText(statusFile(context));
+        OperationStatus status = readOperationStatus(context);
+        return status == null ? "" : status.text();
     }
 
     private static File statusFile(Context context) {

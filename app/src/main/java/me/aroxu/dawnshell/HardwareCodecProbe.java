@@ -158,8 +158,13 @@ final class HardwareCodecProbe {
         }
     }
 
+    static OperationStatus readOperationStatus(Context context) throws IOException {
+        return StatusStore.read(file(BfuPreferences.deviceProtectedContext(context), STATUS_FILE));
+    }
+
     static String readStatus(Context context) throws IOException {
-        return StatusStore.readText(file(BfuPreferences.deviceProtectedContext(context), STATUS_FILE));
+        OperationStatus status = readOperationStatus(context);
+        return status == null ? "" : status.text();
     }
 
     static String readCapabilities(Context context) throws IOException {

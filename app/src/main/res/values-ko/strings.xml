@@ -122,6 +122,10 @@
     <string name="bfu_lifecycle_requested">Debian 제어 요청을 바로 전송했습니다: %1$s</string>
     <string name="bfu_lifecycle_request_failed">Debian 수명 주기 작업을 요청하지 못했습니다: %1$s</string>
     <string name="bfu_lifecycle_status">Debian systemd 수명 주기 상태:\n%1$s</string>
+    <string name="bfu_lifecycle_running_detail">%1$s · %2$s · init PID %3$d · cgroup %4$s · USB %5$s</string>
+    <string name="bfu_lifecycle_stopped_detail">%1$s · 중지됨 (마지막 상태: %2$s)</string>
+    <string name="bfu_lifecycle_health_ok">정상</string>
+    <string name="bfu_lifecycle_health_bad">비정상</string>
     <string name="bfu_lifecycle_status_none">기록된 Debian 수명 주기 작업이 없습니다.</string>
     <string name="bfu_lifecycle_status_failed">Debian 수명 주기 상태를 읽지 못했습니다: %1$s</string>
     <string name="bfu_lifecycle_log_title">Debian systemd 수명 주기 로그(실시간, 최신 64 KiB):</string>

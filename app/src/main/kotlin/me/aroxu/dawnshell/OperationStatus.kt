@@ -60,7 +60,8 @@ object StatusStore {
     @Throws(IOException::class)
     fun read(source: File): OperationStatus? {
         if (!source.isFile) return null
-        val text = source.inputStream().use { it.readNBytes(MAX_BYTES) }.toString(Charsets.UTF_8).trim()
+        val bytes = source.inputStream().use { it.readBytes() }
+        val text = bytes.decodeToString(endIndex = minOf(bytes.size, MAX_BYTES)).trim()
         if (text.isEmpty()) return null
         try {
             return json.decodeFromString(OperationStatus.serializer(), text)

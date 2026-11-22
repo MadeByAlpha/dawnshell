@@ -1059,71 +1059,36 @@ internal class BootActivity : AppCompatActivity(), BootActions {
 
     // Status lines
 
-    private inline fun statusLine(
-        @StringRes none: Int,
-        @StringRes format: Int,
-        maximumLength: Int,
-        @StringRes failed: Int,
-        read: () -> String,
-    ): String = try {
-        getString(format, compact(read().ifEmpty { getString(none) }, maximumLength))
+    private inline fun loadStatus(read: () -> OperationStatus?): StatusLoad = try {
+        read()?.let(StatusLoad::Loaded) ?: StatusLoad.Missing
     } catch (e: IOException) {
-        getString(failed, e.message)
-    }
-
-    private inline fun codecStatusLine(
-        @StringRes none: Int,
-        @StringRes format: Int,
-        @StringRes failed: Int,
-        read: () -> String,
-    ): String = try {
-        getString(format, compact(read().ifEmpty { getString(none) }, 520))
-    } catch (e: IOException) {
-        getString(failed, BfuSu.sanitize(e.message))
+        StatusLoad.Failed(BfuSu.sanitize(e.message))
     } catch (e: RuntimeException) {
-        getString(failed, BfuSu.sanitize(e.message))
+        StatusLoad.Failed(BfuSu.sanitize(e.message))
     }
 
     private fun refreshSystemConfigurationStatus() {
-        state.systemConfigStatus = statusLine(
-            R.string.bfu_system_config_status_none, R.string.bfu_system_config_status, 360,
-            R.string.bfu_system_config_status_failed,
-        ) { DebianSystemProvisioner.readStatus(this) }
+        state.systemConfigStatus = loadStatus { DebianSystemProvisioner.readOperationStatus(this) }
     }
 
     private fun refreshLifecycleStatus() {
-        state.lifecycleStatus = statusLine(
-            R.string.bfu_lifecycle_status_none, R.string.bfu_lifecycle_status, 420,
-            R.string.bfu_lifecycle_status_failed,
-        ) { DebianLauncher.readStatus(this) }
+        state.lifecycleStatus = loadStatus { DebianLauncher.readOperationStatus(this) }
     }
 
     private fun refreshDockerPolicyStatus() {
-        state.dockerPolicyStatus = statusLine(
-            R.string.dawnshell_docker_policy_status_none, R.string.dawnshell_docker_policy_status, 420,
-            R.string.dawnshell_docker_policy_status_failed,
-        ) { DockerNetworkProvisioner.readStatus(this) }
+        state.dockerPolicyStatus = loadStatus { DockerNetworkProvisioner.readOperationStatus(this) }
     }
 
     private fun refreshHardwareCodecStatus() {
-        state.hardwareCodecStatus = codecStatusLine(
-            R.string.dawnshell_codec_status_none, R.string.dawnshell_codec_status,
-            R.string.dawnshell_codec_status_failed,
-        ) { HardwareCodecProbe.readStatus(this) }
+        state.hardwareCodecStatus = loadStatus { HardwareCodecProbe.readOperationStatus(this) }
     }
 
     private fun refreshHardwareCodecLongRunStatus() {
-        state.hardwareCodecLongRunStatus = codecStatusLine(
-            R.string.dawnshell_codec_long_run_status_none, R.string.dawnshell_codec_long_run_status,
-            R.string.dawnshell_codec_long_run_status_failed,
-        ) { HardwareCodecLongRun.readStatus(this) }
+        state.hardwareCodecLongRunStatus = loadStatus { HardwareCodecLongRun.readOperationStatus(this) }
     }
 
     private fun refreshInstallerStatus() {
-        state.installStatus = statusLine(
-            R.string.bfu_debian_install_status_none, R.string.bfu_debian_install_status, 360,
-            R.string.bfu_debian_install_status_failed,
-        ) { DebianRootfsInstaller.readStatus(this) }
+        state.installStatus = loadStatus { DebianRootfsInstaller.readOperationStatus(this) }
     }
 
     private fun recordOperation(message: String) {

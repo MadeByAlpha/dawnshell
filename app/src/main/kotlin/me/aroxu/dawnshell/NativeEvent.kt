@@ -175,8 +175,20 @@ object NativeOutput {
     fun runtimeProbeSucceeded(text: String?): Boolean =
         parse(text).filterIsInstance<RuntimeProbe>().any { it.succeeded }
 
+    /** Typed view of the events persisted by [detail]. */
+    @JvmStatic
+    fun fromDetail(detail: JsonObject?): List<NativeEvent> =
+        (detail?.get("events") as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.let(::decodeFields) }
+
     private fun decode(line: String): NativeEvent? = try {
-        val fields = json.parseToJsonElement(line).jsonObject
+        decodeFields(json.parseToJsonElement(line).jsonObject)
+    } catch (e: SerializationException) {
+        null
+    } catch (e: IllegalArgumentException) {
+        null
+    }
+
+    private fun decodeFields(fields: JsonObject): NativeEvent? = try {
         val name = fields["event"]?.jsonPrimitive?.content
         when (val serializer = name?.let(serializers::get)) {
             null -> name?.let { OtherEvent(it, fields) }

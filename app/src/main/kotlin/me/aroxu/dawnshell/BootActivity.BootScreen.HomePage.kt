@@ -65,7 +65,11 @@ internal fun HomePage(s: BootUiState, a: BootActions) {
 
         // TODO: Rewrite this
         TerminalPanel(Modifier.fillMaxWidth().padding(top = 14.dp)) {
-            Text(s.lifecycleStatus, Modifier.padding(14.dp), style = consoleTextStyle(), maxLines = 5)
+            Text(
+                s.lifecycleStatus.text(
+                    R.string.bfu_lifecycle_status_none, R.string.bfu_lifecycle_status, R.string.bfu_lifecycle_status_failed, 420,
+                ),
+                Modifier.padding(14.dp), style = consoleTextStyle(), maxLines = 5)
         }
         Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DawnShellButton(

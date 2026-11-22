@@ -32,9 +32,14 @@ final class HardwareCodecLongRun {
         return result;
     }
 
-    static String readStatus(Context context) throws IOException {
-        return StatusStore.readText(new File(
+    static OperationStatus readOperationStatus(Context context) throws IOException {
+        return StatusStore.read(new File(
                 BfuPreferences.deviceProtectedContext(context).getFilesDir(), STATUS_FILE));
+    }
+
+    static String readStatus(Context context) throws IOException {
+        OperationStatus status = readOperationStatus(context);
+        return status == null ? "" : status.text();
     }
 
     static String readLiveReport(Context context) throws IOException {

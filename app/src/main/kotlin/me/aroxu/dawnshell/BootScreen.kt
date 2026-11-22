@@ -88,12 +88,20 @@ internal fun SetupPage(s: BootUiState, a: BootActions) {
     SectionCard {
         SectionTitle(stringResource(R.string.dawnshell_section_debian_setup))
         Body(stringResource(R.string.dawnshell_section_debian_setup_description), Modifier.padding(top = 4.dp))
-        Small(s.installStatus, Modifier.padding(top = 16.dp, start = 4.dp), maxLines = 4)
+        Small(
+            s.installStatus.text(
+                R.string.bfu_debian_install_status_none, R.string.bfu_debian_install_status, R.string.bfu_debian_install_status_failed, 360,
+            ),
+            Modifier.padding(top = 16.dp, start = 4.dp), maxLines = 4)
         DawnShellButton(
             stringResource(R.string.bfu_install_debian), a::confirmDebianInstall,
             Modifier.fillMaxWidth().padding(top = 10.dp), filled = true,
         )
-        Small(s.systemConfigStatus, Modifier.padding(top = 16.dp, start = 4.dp), maxLines = 4)
+        Small(
+            s.systemConfigStatus.text(
+                R.string.bfu_system_config_status_none, R.string.bfu_system_config_status, R.string.bfu_system_config_status_failed, 360,
+            ),
+            Modifier.padding(top = 16.dp, start = 4.dp), maxLines = 4)
         DawnShellButton(
             stringResource(R.string.bfu_configure_system), a::confirmSystemConfiguration,
             Modifier.fillMaxWidth().padding(top = 10.dp),
@@ -243,7 +251,11 @@ internal fun CodecPage(s: BootUiState, a: BootActions) {
     SubTitle(stringResource(R.string.dawnshell_codec_apply_probe))
 
     // TODO: Rich
-    SelectableSmall(s.hardwareCodecStatus, Modifier.padding(top = 12.dp))
+    SelectableSmall(
+        s.hardwareCodecStatus.text(
+            R.string.dawnshell_codec_status_none, R.string.dawnshell_codec_status, R.string.dawnshell_codec_status_failed, 520,
+        ),
+        Modifier.padding(top = 12.dp))
     DawnShellButton(
         stringResource(R.string.dawnshell_codec_apply_probe), a::probeHardwareCodecs,
         Modifier.fillMaxWidth().padding(top = 12.dp), filled = true,
@@ -298,7 +310,12 @@ internal fun CodecPage(s: BootUiState, a: BootActions) {
     Callout(colorResource(R.color.ds_warning_container), colorResource(R.color.ds_on_warning_container), Modifier.padding(top = 8.dp)) {
         Small(stringResource(R.string.dawnshell_codec_long_run_warning), color = colorResource(R.color.ds_on_warning_container))
     }
-    SelectableSmall(s.hardwareCodecLongRunStatus, Modifier.padding(top = 12.dp))
+    SelectableSmall(
+        s.hardwareCodecLongRunStatus.text(
+            R.string.dawnshell_codec_long_run_status_none, R.string.dawnshell_codec_long_run_status,
+            R.string.dawnshell_codec_long_run_status_failed, 520,
+        ),
+        Modifier.padding(top = 12.dp))
     Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         DawnShellButton(
             stringResource(R.string.dawnshell_codec_long_run_start), a::confirmLongRunStart,
