@@ -36,6 +36,7 @@ internal interface BootActions {
     fun confirmForceStop()
     fun confirmExportPrivateKey()
     fun confirmCopyKeyImportCommand()
+    fun buildSshConnectCommand(): String
     fun copySshConnectCommand()
     fun confirmRotateSshKey()
     fun updatePassword(account: String)

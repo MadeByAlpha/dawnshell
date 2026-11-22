@@ -166,6 +166,7 @@ internal class BootActivity : AppCompatActivity(), BootActions {
 
     // SSH access
 
+    /*
     private fun refreshGeneratedSshIdentity(provisionPublicKey: Boolean) {
         state.generatedPublicKey = try {
             val identity = BfuSshClientKeyStore.ensure(this)
@@ -178,6 +179,7 @@ internal class BootActivity : AppCompatActivity(), BootActions {
             getString(R.string.bfu_generated_key_failed, e.message)
         }
     }
+     */
 
     override fun confirmRotateSshKey() {
         if (!isUserUnlocked()) {
@@ -197,7 +199,7 @@ internal class BootActivity : AppCompatActivity(), BootActions {
             val identity = BfuSshClientKeyStore.generateAndReplace(this)
             val layout = BfuRuntime.provision(this)
             BfuAuthorizedKeys.validateAndSave(layout, identity.publicKey)
-            state.generatedPublicKey = identity.publicKey
+            //state.generatedPublicKey = identity.publicKey
             recordOperation("SSH_CLIENT_KEY_ROTATED algorithm=ed25519 de_public_key_updated=true")
             state.dialogs += BootDialog.Notice(
                 getString(R.string.bfu_rotate_ssh_key_done_message),
@@ -263,7 +265,7 @@ internal class BootActivity : AppCompatActivity(), BootActions {
             "printf 'Imported DawnShell client key: %s\\n' \"\$KEY\""
     }
 
-    private fun buildSshConnectCommand() =
+    override fun buildSshConnectCommand() =
         "ssh -i \"\$HOME/.ssh/dawnshell-ed25519\" -p 22 " +
             "-o IdentitiesOnly=yes -o PasswordAuthentication=no " +
             "-o StrictHostKeyChecking=accept-new " +
@@ -304,7 +306,7 @@ internal class BootActivity : AppCompatActivity(), BootActions {
         state.hardwareCodec = BfuPreferences.hardwareCodecBridge(this)
         state.selectUsbMode(BfuPreferences.usbPassthroughMode(this))
         state.usbDeviceIds.setTextAndPlaceCursorAtEnd(BfuPreferences.usbExclusiveDeviceIds(this))
-        refreshGeneratedSshIdentity(true)
+        //refreshGeneratedSshIdentity(true)
         refreshRootAuthorizationStatus()
         refreshProbeStatus(false)
         refreshInstallerStatus()

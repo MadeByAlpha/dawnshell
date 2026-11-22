@@ -103,7 +103,6 @@ internal class BootUiState {
     var hardwareCodecStatus by mutableStateOf<StatusLoad>(StatusLoad.Missing)
     var hardwareCodecLongRunStatus by mutableStateOf<StatusLoad>(StatusLoad.Missing)
     var probeSummary by mutableStateOf("")
-    var generatedPublicKey by mutableStateOf("")
 
     var rootAuthorizationInProgress by mutableStateOf(false)
     var passwordUpdateInProgress by mutableStateOf(false)
