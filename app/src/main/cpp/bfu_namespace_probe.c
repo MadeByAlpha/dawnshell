@@ -1,5 +1,7 @@
 #define _GNU_SOURCE
 
+#include "dawnshell_json.h"
+
 #include <errno.h>
 #include <dirent.h>
 #include <fcntl.h>
@@ -371,31 +373,59 @@ static void log_matching_snapshot(const char *label, const char *path,
             (long long) realtime_seconds(), label, emitted);
 }
 
-static void report_failure_text(const char *message) {
+static void report_failure_text(const char *message, size_t length) {
     if (failure_report_fd >= 0 && message != NULL) {
-        (void) write(failure_report_fd, message, strlen(message));
+        (void) write(failure_report_fd, message, length);
     }
+}
+
+static int fail_with(const char *stage, int saved_errno, const char *error, int code) {
+    char buffer[512];
+    DsJson json;
+    ds_json_begin(&json, buffer, sizeof(buffer), "failed");
+    ds_json_str(&json, "stage", stage);
+    if (saved_errno != 0) ds_json_int(&json, "errno", saved_errno);
+    ds_json_str(&json, "error", error);
+    ds_json_emit(&json, STDERR_FILENO);
+    report_failure_text(buffer, json.len);
+    return code;
 }
 
 static int fail_errno(const char *stage, int code) {
     const int saved_errno = errno;
-    char message[512];
-    snprintf(message, sizeof(message),
-             "BFU_DEBIAN_LAUNCHER_FAILED stage=%s errno=%d error=%s\n",
-             stage, saved_errno, strerror(saved_errno));
-    fputs(message, stderr);
-    report_failure_text(message);
-    return code;
+    return fail_with(stage, saved_errno, strerror(saved_errno), code);
 }
 
 static int fail_message(const char *stage, const char *message_text, int code) {
-    char message[512];
-    snprintf(message, sizeof(message),
-             "BFU_DEBIAN_LAUNCHER_FAILED stage=%s error=%s\n",
-             stage, message_text);
-    fputs(message, stderr);
-    report_failure_text(message);
-    return code;
+    return fail_with(stage, 0, message_text, code);
+}
+
+static void emit_mode_event(const char *event, const char *mode) {
+    char buffer[160];
+    DsJson json;
+    ds_json_begin(&json, buffer, sizeof(buffer), event);
+    ds_json_str(&json, "mode", mode);
+    ds_json_emit(&json, STDOUT_FILENO);
+}
+
+/* key == NULL emits the bare event. */
+static void emit_pid_event(const char *event, const char *key, int pid) {
+    char buffer[160];
+    DsJson json;
+    ds_json_begin(&json, buffer, sizeof(buffer), event);
+    if (key != NULL) ds_json_int(&json, key, pid);
+    ds_json_emit(&json, STDOUT_FILENO);
+}
+
+/* Reports a failed start to the parent through the readiness pipe. */
+static void emit_start_failed(int fd, const char *stage, int saved_errno, const char *key, int value) {
+    char buffer[256];
+    DsJson json;
+    ds_json_begin(&json, buffer, sizeof(buffer), "start_failed");
+    ds_json_str(&json, "stage", stage);
+    if (saved_errno != 0) ds_json_int(&json, "errno", saved_errno);
+    if (key != NULL) ds_json_int(&json, key, value);
+    ds_json_emit(&json, fd);
 }
 
 static int run_argv(char *const argv[], bool quiet) {
@@ -2910,7 +2940,8 @@ static int set_systemd_parent_namespaces(const char *control_dir,
 static int enter_debian_probe(const char *root) {
     static const char probe_command[] =
             "set -u; "
-            "fail() { printf 'BFU_DEBIAN_NAMESPACE_FAILED stage=%s\\n' \"$1\"; exit 60; }; "
+            "ts=$(/usr/bin/date +%s); "
+            "fail() { printf '{\"v\":1,\"ts\":%s,\"event\":\"namespace_failed\",\"stage\":\"%s\"}\\n' \"$ts\" \"$1\"; exit 60; }; "
             "[ \"$$\" -eq 1 ] || fail debian_shell_not_pid1; "
             "IFS= read -r proc1 < /proc/1/comm || fail proc1_read; "
             "[ \"$proc1\" = sh ] || fail proc1_not_debian_shell; "
@@ -2921,9 +2952,9 @@ static int enter_debian_probe(const char *root) {
             "[ \"$version\" = 13 ] || fail debian_version_not_13; "
             "if [ -x /sbin/init ]; then init=present; else init=absent; fi; "
             "if [ -x /usr/bin/systemctl ]; then systemctl=present; else systemctl=absent; fi; "
-            "cgroup=$(while IFS= read -r line; do printf '%s,' \"$line\"; done < /proc/self/cgroup); "
-            "printf 'BFU_DEBIAN_NAMESPACE_OK pid=%s proc1=%s arch=%s debian=%s init=%s systemctl=%s cgroup=%s\\n' "
-            "\"$$\" \"$proc1\" \"$arch\" \"$version\" \"$init\" \"$systemctl\" \"$cgroup\"";
+            "cgroup=$(while IFS= read -r line; do printf '%s,' \"$line\"; done < /proc/self/cgroup | /usr/bin/tr -cd 'A-Za-z0-9_./:@+=,-'); "
+            "printf '{\"v\":1,\"ts\":%s,\"event\":\"namespace_ok\",\"pid\":%s,\"proc1\":\"%s\",\"arch\":\"%s\",\"debian\":%s,\"init\":\"%s\",\"systemctl\":\"%s\",\"cgroup\":\"%s\"}\\n' "
+            "\"$ts\" \"$$\" \"$proc1\" \"$arch\" \"$version\" \"$init\" \"$systemctl\" \"$cgroup\"";
 
     int result = prepare_child_mounts(root, NULL, false, CGROUP_MODE_UNKNOWN,
                                       HOST_USB_OFF);
@@ -2950,14 +2981,14 @@ static int enter_debian_probe(const char *root) {
 static int enter_debian_compat_probe(const char *root) {
     static const char probe_command[] =
             "set -u; "
-            "fail() { printf 'BFU_DEBIAN_COMPATIBILITY_FAILED stage=%s\\n' \"$1\"; exit 60; }; "
+            "ts=$(/usr/bin/date +%s); "
+            "fail() { printf '{\"v\":1,\"ts\":%s,\"event\":\"compat_failed\",\"stage\":\"%s\"}\\n' \"$ts\" \"$1\"; exit 60; }; "
             "arch=$(/usr/bin/dpkg --print-architecture) || fail dpkg_arch; "
             "[ -r /etc/debian_version ] || fail debian_version_read; "
             "version=$(/usr/bin/cut -d. -f1 /etc/debian_version) || fail debian_version_read; "
             "[ \"$version\" = 13 ] || fail debian_version_not_13; "
-            "printf 'BFU_DEBIAN_COMPATIBILITY_OK mode=compat arch=%s debian=%s ' "
-            "\"$arch\" \"$version\"; "
-            "printf 'pid_namespace=shared mount_namespace=private uts_namespace=private\\n'";
+            "printf '{\"v\":1,\"ts\":%s,\"event\":\"compat_ok\",\"mode\":\"compat\",\"arch\":\"%s\",\"debian\":%s,\"pid_namespace\":\"shared\",\"mount_namespace\":\"private\",\"uts_namespace\":\"private\"}\\n' "
+            "\"$ts\" \"$arch\" \"$version\"";
 
     int result = prepare_child_mounts(root, NULL, false, CGROUP_MODE_UNKNOWN,
                                       HOST_USB_OFF);
@@ -3232,9 +3263,7 @@ static void report_start_grace_failure(int ready_fd, const char *stage,
         dprintf(STDERR_FILENO,
                 "[%lld] BFU_DEBIAN_START_FAILED stage=%s child_exit=%d\n",
                 (long long) realtime_seconds(), stage, child_exit);
-        dprintf(ready_fd,
-                "BFU_DEBIAN_START_FAILED stage=%s child_exit=%d\n",
-                stage, child_exit);
+        emit_start_failed(ready_fd, stage, 0, "child_exit", child_exit);
         return;
     }
     if (wait_status >= 0 && WIFSIGNALED(wait_status)) {
@@ -3242,17 +3271,13 @@ static void report_start_grace_failure(int ready_fd, const char *stage,
         dprintf(STDERR_FILENO,
                 "[%lld] BFU_DEBIAN_START_FAILED stage=%s child_signal=%d\n",
                 (long long) realtime_seconds(), stage, child_signal);
-        dprintf(ready_fd,
-                "BFU_DEBIAN_START_FAILED stage=%s child_signal=%d\n",
-                stage, child_signal);
+        emit_start_failed(ready_fd, stage, 0, "child_signal", child_signal);
         return;
     }
     dprintf(STDERR_FILENO,
             "[%lld] BFU_DEBIAN_START_FAILED stage=%s child_status=unknown errno=%d\n",
             (long long) realtime_seconds(), stage, probe_errno);
-    dprintf(ready_fd,
-            "BFU_DEBIAN_START_FAILED stage=%s child_status=unknown errno=%d\n",
-            stage, probe_errno);
+    emit_start_failed(ready_fd, stage, probe_errno, NULL, 0);
 }
 
 /* systemd's halt signal eventually reaches the kernel reboot path. On some
@@ -3322,8 +3347,7 @@ static int supervisor_compat_loop(const char *root, const char *control_dir,
         int saved_errno = errno;
         if (network_manager_pid > 0) (void) kill(network_manager_pid, SIGTERM);
         errno = saved_errno;
-        dprintf(ready_fd, "BFU_DEBIAN_START_FAILED stage=compat_exec_pipe errno=%d\n",
-                errno);
+        emit_start_failed(ready_fd, "compat_exec_pipe", errno, NULL, 0);
         return 78;
     }
     (void) fcntl(exec_pipe[0], F_SETFD, FD_CLOEXEC);
@@ -3335,8 +3359,7 @@ static int supervisor_compat_loop(const char *root, const char *control_dir,
         close(exec_pipe[0]);
         close(exec_pipe[1]);
         errno = saved_errno;
-        dprintf(ready_fd, "BFU_DEBIAN_START_FAILED stage=compat_fork_sshd errno=%d\n",
-                errno);
+        emit_start_failed(ready_fd, "compat_fork_sshd", errno, NULL, 0);
         return 79;
     }
     if (service_pid == 0) {
@@ -3377,7 +3400,7 @@ static int supervisor_compat_loop(const char *root, const char *control_dir,
             (void) kill(network_manager_pid, SIGTERM);
             while (waitpid(network_manager_pid, NULL, 0) < 0 && errno == EINTR) {}
         }
-        dprintf(ready_fd, "BFU_DEBIAN_START_FAILED stage=compat_exec_sshd\n");
+        emit_start_failed(ready_fd, "compat_exec_sshd", 0, NULL, 0);
         return 80;
     }
     int early_wait_status = -1;
@@ -3418,10 +3441,7 @@ static int supervisor_compat_loop(const char *root, const char *control_dir,
             (void) kill(network_manager_pid, SIGTERM);
             while (waitpid(network_manager_pid, NULL, 0) < 0 && errno == EINTR) {}
         }
-        dprintf(ready_fd,
-                "BFU_DEBIAN_START_FAILED "
-                "stage=compat_sshd_identity_or_namespace errno=%d\n",
-                saved_errno);
+        emit_start_failed(ready_fd, "compat_sshd_identity_or_namespace", saved_errno, NULL, 0);
         return 82;
     }
 
@@ -3440,10 +3460,18 @@ static int supervisor_compat_loop(const char *root, const char *control_dir,
             "net:android-shared cgroup_mode=none host_usb_mode=%s\n",
             (long long) realtime_seconds(), getpid(), service_pid,
             host_usb_policy_name(host_usb_policy));
-    dprintf(ready_fd,
-            "BFU_DEBIAN_FALLBACK_STARTED supervisor_pid=%d sshd_pid=%d "
-            "mode=compat systemd_pid1=false cgroup_mode=none host_usb_mode=%s\n",
-            getpid(), service_pid, host_usb_policy_name(host_usb_policy));
+    {
+        char buffer[384];
+        DsJson json;
+        ds_json_begin(&json, buffer, sizeof(buffer), "fallback_started");
+        ds_json_int(&json, "supervisor_pid", getpid());
+        ds_json_int(&json, "sshd_pid", service_pid);
+        ds_json_str(&json, "mode", "compat");
+        ds_json_bool(&json, "systemd_pid1", false);
+        ds_json_str(&json, "cgroup_mode", "none");
+        ds_json_str(&json, "host_usb_mode", host_usb_policy_name(host_usb_policy));
+        ds_json_emit(&json, ready_fd);
+    }
     close(ready_fd);
 
     bool shutdown_sent = false;
@@ -3507,13 +3535,12 @@ static int supervisor_loop(const char *root, const char *control_dir,
                            HostUsbPolicy host_usb_policy,
                            const UsbDeviceFilter *usb_device_filter) {
     if (setsid() < 0) {
-        dprintf(ready_fd, "BFU_DEBIAN_START_FAILED stage=setsid errno=%d\n", errno);
+        emit_start_failed(ready_fd, "setsid", errno, NULL, 0);
         return 73;
     }
     signal(SIGHUP, SIG_IGN);
     if (redirect_supervisor_stdio(log_path) != 0) {
-        dprintf(ready_fd, "BFU_DEBIAN_START_FAILED stage=open_lifecycle_log errno=%d\n",
-                errno);
+        emit_start_failed(ready_fd, "open_lifecycle_log", errno, NULL, 0);
         return 74;
     }
     dprintf(STDERR_FILENO,
@@ -3533,7 +3560,7 @@ static int supervisor_loop(const char *root, const char *control_dir,
     sigemptyset(&action.sa_mask);
     if (sigaction(SIGTERM, &action, NULL) != 0
             || sigaction(SIGINT, &action, NULL) != 0) {
-        dprintf(ready_fd, "BFU_DEBIAN_START_FAILED stage=signal_setup errno=%d\n", errno);
+        emit_start_failed(ready_fd, "signal_setup", errno, NULL, 0);
         return 75;
     }
 
@@ -3549,13 +3576,11 @@ static int supervisor_loop(const char *root, const char *control_dir,
             || read_proc_exe_identity(state.supervisor_pid,
                                       &state.supervisor_exe_dev,
                                       &state.supervisor_exe_ino) != 0) {
-        dprintf(ready_fd,
-                "BFU_DEBIAN_START_FAILED stage=supervisor_identity errno=%d\n", errno);
+        emit_start_failed(ready_fd, "supervisor_identity", errno, NULL, 0);
         return 76;
     }
     if (write_state(control_dir, &state) != 0) {
-        dprintf(ready_fd, "BFU_DEBIAN_START_FAILED stage=write_starting_state errno=%d\n",
-                errno);
+        emit_start_failed(ready_fd, "write_starting_state", errno, NULL, 0);
         return 77;
     }
 
@@ -3564,18 +3589,14 @@ static int supervisor_loop(const char *root, const char *control_dir,
     char host_reboot_fifo[PATH_MAX];
     if (prepare_host_reboot_fifo(control_dir, host_reboot_fifo,
                                  sizeof(host_reboot_fifo)) != 0) {
-        dprintf(ready_fd,
-                "BFU_DEBIAN_START_FAILED stage=host_reboot_fifo errno=%d\n",
-                errno);
+        emit_start_failed(ready_fd, "host_reboot_fifo", errno, NULL, 0);
         return 78;
     }
     if (start_network_manager(getpid(), lock_fd, ready_fd,
                               host_reboot_fifo,
                               &network_manager_pid, &network_ready_fd) != 0) {
         unlink(host_reboot_fifo);
-        dprintf(ready_fd,
-                "BFU_DEBIAN_START_FAILED stage=network_manager_start errno=%d\n",
-                errno);
+        emit_start_failed(ready_fd, "network_manager_start", errno, NULL, 0);
         return 78;
     }
 
@@ -3587,8 +3608,7 @@ static int supervisor_loop(const char *root, const char *control_dir,
                                                &cgroup_mode);
     if (result != 0) {
         cleanup_delegated_cgroups(root, control_dir);
-        dprintf(ready_fd, "BFU_DEBIAN_START_FAILED stage=namespace_setup exit=%d\n",
-                result);
+        emit_start_failed(ready_fd, "namespace_setup", 0, "exit", result);
         return result;
     }
     snprintf(state.cgroup_mode, sizeof(state.cgroup_mode), "%s",
@@ -3614,7 +3634,7 @@ static int supervisor_loop(const char *root, const char *control_dir,
         int saved_errno = errno;
         cleanup_delegated_cgroups(root, control_dir);
         errno = saved_errno;
-        dprintf(ready_fd, "BFU_DEBIAN_START_FAILED stage=exec_pipe errno=%d\n", errno);
+        emit_start_failed(ready_fd, "exec_pipe", errno, NULL, 0);
         return 78;
     }
     (void) fcntl(exec_pipe[0], F_SETFD, FD_CLOEXEC);
@@ -3622,7 +3642,7 @@ static int supervisor_loop(const char *root, const char *control_dir,
 
     pid_t init_pid = fork();
     if (init_pid < 0) {
-        dprintf(ready_fd, "BFU_DEBIAN_START_FAILED stage=fork_systemd errno=%d\n", errno);
+        emit_start_failed(ready_fd, "fork_systemd", errno, NULL, 0);
         close(exec_pipe[0]);
         close(exec_pipe[1]);
         cleanup_delegated_cgroups(root, control_dir);
@@ -3663,7 +3683,7 @@ static int supervisor_loop(const char *root, const char *control_dir,
         state.wait_status = 80;
         (void) write_state(control_dir, &state);
         cleanup_delegated_cgroups(root, control_dir);
-        dprintf(ready_fd, "BFU_DEBIAN_START_FAILED stage=exec_systemd\n");
+        emit_start_failed(ready_fd, "exec_systemd", 0, NULL, 0);
         return 80;
     }
 
@@ -3701,8 +3721,7 @@ static int supervisor_loop(const char *root, const char *control_dir,
         state.wait_status = 82;
         (void) write_state(control_dir, &state);
         cleanup_delegated_cgroups(root, control_dir);
-        dprintf(ready_fd,
-                "BFU_DEBIAN_START_FAILED stage=init_identity_or_pid_namespace\n");
+        emit_start_failed(ready_fd, "init_identity_or_pid_namespace", 0, NULL, 0);
         return 82;
     }
 
@@ -3731,12 +3750,18 @@ static int supervisor_loop(const char *root, const char *control_dir,
             (unsigned long long) state.init_net_ns_ino,
             cgroup_mode_name(cgroup_mode), host_usb_policy_name(host_usb_policy),
             usb_device_filter->count);
-    dprintf(ready_fd,
-            "BFU_DEBIAN_STARTED supervisor_pid=%d init_host_pid=%d "
-            "namespace_pid=1 cgroup_mode=%s host_usb_mode=%s "
-            "host_usb_filter_count=%zu\n",
-            getpid(), init_pid, cgroup_mode_name(cgroup_mode),
-            host_usb_policy_name(host_usb_policy), usb_device_filter->count);
+    {
+        char buffer[384];
+        DsJson json;
+        ds_json_begin(&json, buffer, sizeof(buffer), "started");
+        ds_json_int(&json, "supervisor_pid", getpid());
+        ds_json_int(&json, "init_host_pid", init_pid);
+        ds_json_int(&json, "namespace_pid", 1);
+        ds_json_str(&json, "cgroup_mode", cgroup_mode_name(cgroup_mode));
+        ds_json_str(&json, "host_usb_mode", host_usb_policy_name(host_usb_policy));
+        ds_json_int(&json, "host_usb_filter_count", (long long) usb_device_filter->count);
+        ds_json_emit(&json, ready_fd);
+    }
     close(ready_fd);
 
     bool shutdown_sent = false;
@@ -3849,20 +3874,26 @@ static int run_status(const char *root, const char *control_dir) {
         flock(lock_fd, LOCK_UN);
         close(lock_fd);
         if (orphaned_init) {
-            printf("BFU_DEBIAN_ORPHANED_INIT mode=%s init_host_pid=%d "
-                   "identity_valid=true updated_epoch=%lld\n",
-                   stale.launch_mode, stale.init_host_pid,
-                   (long long) stale.updated_epoch);
+            char buffer[320];
+            DsJson json;
+            ds_json_begin(&json, buffer, sizeof(buffer), "orphaned_init");
+            ds_json_str(&json, "mode", stale.launch_mode);
+            ds_json_int(&json, "init_host_pid", stale.init_host_pid);
+            ds_json_bool(&json, "identity_valid", true);
+            ds_json_int(&json, "updated_epoch", stale.updated_epoch);
+            ds_json_emit(&json, STDOUT_FILENO);
             return 1;
         }
-        printf("BFU_DEBIAN_STOPPED last_state=%s mode=%s cgroup_mode=%s host_usb_mode=%s "
-               "wait_status=%d updated_epoch=%lld\n",
-               has_state ? stale.state : "none",
-               has_state ? stale.launch_mode : "systemd",
-               has_state ? stale.cgroup_mode : "unknown",
-               has_state ? stale.host_usb_mode : "unknown",
-               has_state ? stale.wait_status : -1,
-               (long long) (has_state ? stale.updated_epoch : 0));
+        char buffer[320];
+        DsJson json;
+        ds_json_begin(&json, buffer, sizeof(buffer), "stopped");
+        ds_json_str(&json, "last_state", has_state ? stale.state : "none");
+        ds_json_str(&json, "mode", has_state ? stale.launch_mode : "systemd");
+        ds_json_str(&json, "cgroup_mode", has_state ? stale.cgroup_mode : "unknown");
+        ds_json_str(&json, "host_usb_mode", has_state ? stale.host_usb_mode : "unknown");
+        ds_json_int(&json, "wait_status", has_state ? stale.wait_status : -1);
+        ds_json_int(&json, "updated_epoch", has_state ? stale.updated_epoch : 0);
+        ds_json_emit(&json, STDOUT_FILENO);
         return 0;
     }
     if (errno != EWOULDBLOCK && errno != EAGAIN) {
@@ -3881,32 +3912,41 @@ static int run_status(const char *root, const char *control_dir) {
             ? validate_compat_namespace_topology(&state) == 0
             : validate_init_namespace_topology(&state) == 0);
     close(lock_fd);
-    printf("BFU_DEBIAN_%s state=%s mode=%s supervisor_pid=%d init_host_pid=%d "
-           "supervisor_identity_valid=%s init_identity_valid=%s "
-           "namespace_topology_valid=%s ipc_namespace=android-shared "
-           "network_namespace=android-shared network_mode=shared-nic cgroup_mode=%s "
-           "host_usb_mode=%s "
-           "pid_ns=%llu mnt_ns=%llu uts_ns=%llu ipc_ns=%llu cgroup_ns=%llu "
-           "net_ns=%llu updated_epoch=%lld\n",
-           supervisor_valid && (topology_valid || strcmp(state.state, "starting") == 0)
-                   ? "RUNNING" : "STARTING_OR_UNKNOWN",
-            state.state, state.launch_mode, state.supervisor_pid, state.init_host_pid,
-           supervisor_valid ? "true" : "false", init_valid ? "true" : "false",
-           topology_valid ? "true" : "false", state.cgroup_mode,
-           state.host_usb_mode,
-           (unsigned long long) state.init_pid_ns_ino,
-           (unsigned long long) state.init_mnt_ns_ino,
-           (unsigned long long) state.init_uts_ns_ino,
-           (unsigned long long) state.init_ipc_ns_ino,
-           (unsigned long long) state.init_cgroup_ns_ino,
-           (unsigned long long) state.init_net_ns_ino,
-           (long long) state.updated_epoch);
+    char buffer[768];
+    DsJson json;
+    ds_json_begin(&json, buffer, sizeof(buffer),
+                  supervisor_valid && (topology_valid || strcmp(state.state, "starting") == 0)
+                          ? "running" : "starting_or_unknown");
+    ds_json_str(&json, "state", state.state);
+    ds_json_str(&json, "mode", state.launch_mode);
+    ds_json_int(&json, "supervisor_pid", state.supervisor_pid);
+    ds_json_int(&json, "init_host_pid", state.init_host_pid);
+    ds_json_bool(&json, "supervisor_identity_valid", supervisor_valid);
+    ds_json_bool(&json, "init_identity_valid", init_valid);
+    ds_json_bool(&json, "namespace_topology_valid", topology_valid);
+    ds_json_str(&json, "ipc_namespace", "android-shared");
+    ds_json_str(&json, "network_namespace", "android-shared");
+    ds_json_str(&json, "network_mode", "shared-nic");
+    ds_json_str(&json, "cgroup_mode", state.cgroup_mode);
+    ds_json_str(&json, "host_usb_mode", state.host_usb_mode);
+    ds_json_obj_begin(&json, "ns");
+    ds_json_int(&json, "pid", (long long) state.init_pid_ns_ino);
+    ds_json_int(&json, "mnt", (long long) state.init_mnt_ns_ino);
+    ds_json_int(&json, "uts", (long long) state.init_uts_ns_ino);
+    ds_json_int(&json, "ipc", (long long) state.init_ipc_ns_ino);
+    ds_json_int(&json, "cgroup", (long long) state.init_cgroup_ns_ino);
+    ds_json_int(&json, "net", (long long) state.init_net_ns_ino);
+    ds_json_obj_end(&json);
+    ds_json_int(&json, "updated_epoch", state.updated_epoch);
+    ds_json_emit(&json, STDOUT_FILENO);
     return 0;
 }
 
 static int enter_debian_health(const char *root) {
     static const char health_command[] =
             "set -u; "
+            "ts=$(/usr/bin/date +%s); "
+            "clean() { printf %s \"$1\" | /usr/bin/tr -cd 'A-Za-z0-9_./:@+=,; -'; }; "
             "pid1=$(/usr/bin/cat /proc/1/comm 2>/dev/null || true); "
             "pid1_start_ticks=$(/usr/bin/mawk '{print $22}' /proc/1/stat "
             "2>/dev/null || true); "
@@ -3953,33 +3993,11 @@ static int enter_debian_health(const char *root) {
             "cgroup_mode=v1-nodev; cgroup_delegation=delegated; "
             "devices_cgroup=unavailable; else cgroup_mode=unknown; "
             "cgroup_delegation=missing; devices_cgroup=missing; fi; "
-            "printf 'BFU_DEBIAN_HEALTH pid1=%s pid1_start_ticks=%s "
-            "system_state=%s dbus_service=%s dbus_bus=%s ssh_service=%s "
-            "boot_proof_service=%s boot_proof_marker=%s "
-            "default_target=%s target_state=%s listen_22=%s "
-            "cgroup_mode=%s cgroup_delegation=%s devices_cgroup=%s "
-            "devices_hierarchy=%s devices_path=%s systemd_path=%s "
-            "unified_path=%s\\n' "
-            "\"$pid1\" \"$pid1_start_ticks\" "
-            "\"$system_state\" \"$dbus_service\" \"$dbus_bus\" "
-            "\"$ssh_service\" \"$boot_proof_service\" \"$boot_proof_marker\" "
-            "\"$default_target\" \"$target_state\" \"$listen_22\" "
-            "\"$cgroup_mode\" \"$cgroup_delegation\" \"$devices_cgroup\" "
-            "\"${devices_hierarchy:-0}\" \"${devices_path:-missing}\" "
-            "\"${systemd_path:-missing}\" \"${unified_path:-missing}\"; "
-            "if [ \"$pid1\" = systemd ] && [ \"$system_state\" = running ] "
-            "&& [ \"$dbus_service\" = active ] "
-            "&& [ \"$dbus_bus\" = ok ] && [ \"$ssh_service\" = active ] "
-            "&& [ \"$boot_proof_service\" = active ] "
-            "&& [ \"$boot_proof_marker\" = present ] "
-            "&& [ \"$default_target\" = multi-user.target ] "
-            "&& [ \"$target_state\" = active ] "
-            "&& [ \"$listen_22\" = true ] "
-            "&& [ \"$cgroup_delegation\" = delegated ]; then exit 0; fi; "
-            "printf '%s\\n' BFU_DEBIAN_DIAGNOSTICS_BEGIN; "
-            "/usr/bin/timeout -k 1 3 /usr/bin/systemctl --no-pager --failed "
-            "2>&1 || true; "
-            "printf '%s\\n' BFU_DEBIAN_DIAGNOSTICS_END; exit 1";
+            "if [ \"$pid1\" = systemd ] && [ \"$system_state\" = running ] && [ \"$dbus_service\" = active ] && [ \"$dbus_bus\" = ok ] && [ \"$ssh_service\" = active ] && [ \"$boot_proof_service\" = active ] && [ \"$boot_proof_marker\" = present ] && [ \"$default_target\" = multi-user.target ] && [ \"$target_state\" = active ] && [ \"$listen_22\" = true ] && [ \"$cgroup_delegation\" = delegated ]; then healthy=true; else healthy=false; fi; "
+            "printf '{\"v\":1,\"ts\":%s,\"event\":\"health\",\"mode\":\"systemd\",\"pid1\":\"%s\",\"system_state\":\"%s\",\"dbus_service\":\"%s\",\"dbus_bus\":\"%s\",\"ssh_service\":\"%s\",\"boot_proof_service\":\"%s\",\"boot_proof_marker\":\"%s\",\"default_target\":\"%s\",\"target_state\":\"%s\",\"cgroup_mode\":\"%s\",\"cgroup_delegation\":\"%s\",\"devices_cgroup\":\"%s\",\"devices_path\":\"%s\",\"systemd_path\":\"%s\",\"unified_path\":\"%s\",\"pid1_start_ticks\":%s,\"devices_hierarchy\":%s,\"listen_22\":%s,\"healthy\":%s}\\n' \"$ts\" \"$(clean \"$pid1\")\" \"$(clean \"$system_state\")\" \"$(clean \"$dbus_service\")\" \"$(clean \"$dbus_bus\")\" \"$(clean \"$ssh_service\")\" \"$(clean \"$boot_proof_service\")\" \"$(clean \"$boot_proof_marker\")\" \"$(clean \"$default_target\")\" \"$(clean \"$target_state\")\" \"$(clean \"$cgroup_mode\")\" \"$(clean \"$cgroup_delegation\")\" \"$(clean \"$devices_cgroup\")\" \"$(clean \"$devices_path\")\" \"$(clean \"$systemd_path\")\" \"$(clean \"$unified_path\")\" \"${pid1_start_ticks:-0}\" \"${devices_hierarchy:-0}\" \"$listen_22\" \"$healthy\"; "
+            "[ \"$healthy\" = true ] && exit 0; "
+            "diagnostic=$(/usr/bin/timeout -k 1 3 /usr/bin/systemctl --no-pager --failed 2>&1 | /usr/bin/head -c 1024 | /usr/bin/tr '\\n' ';'); "
+            "printf '{\"v\":1,\"ts\":%s,\"event\":\"diagnostic\",\"label\":\"systemctl_failed\",\"content\":\"%s\"}\\n' \"$ts\" \"$(clean \"$diagnostic\")\"; exit 1";
 
     if (chdir(root) != 0) return fail_errno("health_chdir_rootfs", 103);
     if (chroot(".") != 0) return fail_errno("health_chroot", 104);
@@ -4002,14 +4020,7 @@ static int enter_debian_compat_health(const char *root) {
             "else print \"false\" }'); "
             "if [ \"$listen_22\" = true ] && [ -x /usr/sbin/sshd ]; then "
             "compat_ready=true; else compat_ready=false; fi; "
-            "printf 'BFU_DEBIAN_HEALTH mode=compat pid1=android-host "
-            "system_state=unavailable dbus_service=unavailable "
-            "dbus_bus=unavailable ssh_service=direct "
-            "boot_proof_service=unavailable boot_proof_marker=unavailable "
-            "default_target=unavailable target_state=unavailable "
-            "listen_22=%s compat_ready=%s cgroup_mode=none "
-            "cgroup_delegation=shared devices_cgroup=shared\\n' "
-            "\"$listen_22\" \"$compat_ready\"; "
+            "printf '{\"v\":1,\"ts\":%s,\"event\":\"health\",\"mode\":\"compat\",\"pid1\":\"android-host\",\"system_state\":\"unavailable\",\"dbus_service\":\"unavailable\",\"dbus_bus\":\"unavailable\",\"ssh_service\":\"direct\",\"boot_proof_service\":\"unavailable\",\"boot_proof_marker\":\"unavailable\",\"default_target\":\"unavailable\",\"target_state\":\"unavailable\",\"cgroup_mode\":\"none\",\"cgroup_delegation\":\"shared\",\"devices_cgroup\":\"shared\",\"listen_22\":%s,\"compat_ready\":%s,\"healthy\":%s}\\n' \"$(/usr/bin/date +%s)\" \"$listen_22\" \"$compat_ready\" \"$compat_ready\"; "
             "[ \"$compat_ready\" = true ]";
 
     if (chdir(root) != 0) return fail_errno("compat_health_chdir_rootfs", 103);
@@ -4435,14 +4446,21 @@ static int run_shutdown_test(const char *root, const char *control_dir,
         return fail_message("shutdown_test_mode",
                             "only_poweroff_reboot_or_shutdown_allowed", 108);
     }
-    printf("BFU_DEBIAN_SHUTDOWN_TEST_REQUESTED mode=%s\n", mode);
+    emit_mode_event("shutdown_test_requested", mode);
     int command_result = run_in_debian_namespaces(root, control_dir,
                                                   enter_debian_systemctl_shutdown,
                                                   mode, 15);
     int stop_result = wait_for_supervisor_exit(control_dir);
     if (stop_result != 0) return command_result != 0 ? command_result : stop_result;
-    printf("BFU_DEBIAN_SHUTDOWN_TEST_COMPLETED mode=%s command_result=%d "
-           "android_reboot_not_assessed\n", mode, command_result);
+    {
+        char buffer[256];
+        DsJson json;
+        ds_json_begin(&json, buffer, sizeof(buffer), "shutdown_test_completed");
+        ds_json_str(&json, "mode", mode);
+        ds_json_int(&json, "command_result", command_result);
+        ds_json_bool(&json, "android_reboot_assessed", false);
+        ds_json_emit(&json, STDOUT_FILENO);
+    }
     return 0;
 }
 
@@ -4558,11 +4576,15 @@ static int run_start(const char *root, const char *control_dir,
             bool valid = read_state(control_dir, &state) == 0
                     && validate_supervisor_identity(&state);
             close(lock_fd);
-            printf("BFU_DEBIAN_ALREADY_RUNNING supervisor_pid=%d init_host_pid=%d "
-                   "identity_valid=%s cgroup_mode=%s host_usb_mode=%s\n",
-                   state.supervisor_pid, state.init_host_pid,
-                   valid ? "true" : "false", state.cgroup_mode,
-                   state.host_usb_mode);
+            char buffer[320];
+            DsJson json;
+            ds_json_begin(&json, buffer, sizeof(buffer), "already_running");
+            ds_json_int(&json, "supervisor_pid", state.supervisor_pid);
+            ds_json_int(&json, "init_host_pid", state.init_host_pid);
+            ds_json_bool(&json, "identity_valid", valid);
+            ds_json_str(&json, "cgroup_mode", state.cgroup_mode);
+            ds_json_str(&json, "host_usb_mode", state.host_usb_mode);
+            ds_json_emit(&json, STDOUT_FILENO);
             return valid ? 0 : fail_message("locked_state_invalid",
                                             "active_lock_has_no_valid_supervisor_identity", 87);
         }
@@ -4589,7 +4611,7 @@ static int run_start(const char *root, const char *control_dir,
     if (leftover_count > 0) {
         flock(lock_fd, LOCK_UN);
         close(lock_fd);
-        printf("BFU_DEBIAN_ORPHANED_INSTANCE first_pid=%d\n", leftovers[0]);
+        emit_pid_event("orphaned_instance", "first_pid", leftovers[0]);
         return fail_message("orphaned_instance",
                             "previous_processes_remain_in_the_delegated_cgroup_run_force_stop",
                             89);
@@ -4628,10 +4650,8 @@ static int run_start(const char *root, const char *control_dir,
     close(ready_pipe[0]);
     if (result != 0) return fail_errno("start_readiness_timeout", 91);
     fputs(message, stdout);
-    return strncmp(message, "BFU_DEBIAN_STARTED ",
-                   strlen("BFU_DEBIAN_STARTED ")) == 0
-            || strncmp(message, "BFU_DEBIAN_FALLBACK_STARTED ",
-                       strlen("BFU_DEBIAN_FALLBACK_STARTED ")) == 0
+    return strstr(message, "\"event\":\"started\"") != NULL
+            || strstr(message, "\"event\":\"fallback_started\"") != NULL
             ? 0 : 92;
 }
 
@@ -4665,9 +4685,12 @@ static int run_stop(const char *root, const char *control_dir) {
                         ? validate_compat_service_identity(&orphan)
                         : validate_init_identity(&orphan);
                 if (!alive) {
-                    printf("BFU_DEBIAN_ORPHANED_INIT_STOPPED mode=%s init_host_pid=%d\n",
-                           compatibility ? "compat" : "systemd",
-                           orphan.init_host_pid);
+                    char buffer[192];
+                    DsJson json;
+                    ds_json_begin(&json, buffer, sizeof(buffer), "orphaned_init_stopped");
+                    ds_json_str(&json, "mode", compatibility ? "compat" : "systemd");
+                    ds_json_int(&json, "init_host_pid", orphan.init_host_pid);
+                    ds_json_emit(&json, STDOUT_FILENO);
                     return 0;
                 }
                 usleep(200000);
@@ -4682,7 +4705,7 @@ static int run_stop(const char *root, const char *control_dir) {
             return fail_message("orphaned_init_stop_timeout",
                                 "forced_SIGKILL_after_grace_period", 95);
         }
-        printf("BFU_DEBIAN_ALREADY_STOPPED\n");
+        emit_pid_event("already_stopped", NULL, 0);
         return 0;
     }
     if (errno != EWOULDBLOCK && errno != EAGAIN) {
@@ -4707,7 +4730,7 @@ static int run_stop(const char *root, const char *control_dir) {
         if (flock(lock_fd, LOCK_EX | LOCK_NB) == 0) {
             flock(lock_fd, LOCK_UN);
             close(lock_fd);
-            printf("BFU_DEBIAN_STOPPED supervisor_pid=%d\n", state.supervisor_pid);
+            emit_pid_event("stopped", "supervisor_pid", state.supervisor_pid);
             return 0;
         }
         if (errno != EWOULDBLOCK && errno != EAGAIN) {
@@ -4761,8 +4784,15 @@ static int run_force_stop(const char *root, const char *control_dir) {
         cleanup_delegated_cgroups(root, control_dir);
         initialize_state(&state, "force-stopped");
         (void) write_state(control_dir, &state);
-        printf("BFU_DEBIAN_FORCE_STOPPED supervisor_pid=0 init_host_pid=%d "
-               "orphan=%s\n", orphan_init_pid, init_valid ? "killed" : "none");
+        {
+            char buffer[256];
+            DsJson json;
+            ds_json_begin(&json, buffer, sizeof(buffer), "force_stopped");
+            ds_json_int(&json, "supervisor_pid", 0);
+            ds_json_int(&json, "init_host_pid", orphan_init_pid);
+            ds_json_str(&json, "orphan", init_valid ? "killed" : "none");
+            ds_json_emit(&json, STDOUT_FILENO);
+        }
         return 0;
     }
     if (errno != EWOULDBLOCK && errno != EAGAIN) {
@@ -4816,9 +4846,14 @@ static int run_force_stop(const char *root, const char *control_dir) {
             state.init_host_pid = init_pid;
             state.wait_status = SIGKILL;
             (void) write_state(control_dir, &state);
-            printf("BFU_DEBIAN_FORCE_STOPPED supervisor_pid=%d init_host_pid=%d "
-                   "signal=SIGKILL lock_released=true\n",
-                   supervisor_pid, init_pid);
+            char buffer[256];
+            DsJson json;
+            ds_json_begin(&json, buffer, sizeof(buffer), "force_stopped");
+            ds_json_int(&json, "supervisor_pid", supervisor_pid);
+            ds_json_int(&json, "init_host_pid", init_pid);
+            ds_json_str(&json, "signal", "SIGKILL");
+            ds_json_bool(&json, "lock_released", true);
+            ds_json_emit(&json, STDOUT_FILENO);
             return 0;
         }
         if (errno != EWOULDBLOCK && errno != EAGAIN) {
