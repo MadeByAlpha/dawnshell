@@ -69,7 +69,6 @@ grep -Fxq 'CONFIG_FEATURE_STAT_FORMAT=y' \
 grep -Fq "stat -c '%u:%g' \"\$TOOLBOX\"" \
     "$repo_dir/app/src/main/assets/bfu/install-debian-rootfs.sh"
 
-bash -n "$repo_dir/scripts/build-bootstrap-runtime.sh"
 bash -n "$repo_dir/scripts/package-release.sh"
 
 release_workflow="$repo_dir/.github/workflows/build.yml"

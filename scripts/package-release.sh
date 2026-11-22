@@ -37,7 +37,6 @@ dirty_source_entries=()
 while IFS= read -r -d '' entry; do
     path="${entry:3}"
     case "$path" in
-        app/src/main/assets/bfu/bin/*|\
         app/src/main/assets/bfu/bootstrap/debootstrap_1.0.141.tgz|\
         app/src/main/assets/bfu/bootstrap/debian-archive-keyring_2025.1_all.deb|\
         app/src/main/assets/bfu/bootstrap/SOURCES.lock)
@@ -64,9 +63,12 @@ required_source_paths=(
     bfu-runtime/sources/busybox-1.38.0.tar.bz2
     bfu-runtime/sources/debian-archive-keyring_2025.1.dsc
     bfu-runtime/sources/debian-archive-keyring_2025.1.tar.xz
-    scripts/build-bootstrap-runtime.sh
+    buildSrc/build.gradle.kts
+    buildSrc/src/main/kotlin/me/aroxu/dawnshell/gradle/BfuRuntime.kt
+    buildSrc/src/main/kotlin/me/aroxu/dawnshell/gradle/BusyBoxTask.kt
+    buildSrc/src/main/kotlin/me/aroxu/dawnshell/gradle/GpgvTask.kt
     scripts/package-release.sh
-    app/build.gradle
+    app/build.gradle.kts
     gradlew
     gradle/wrapper/gradle-wrapper.properties
 )

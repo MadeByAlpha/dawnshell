@@ -22,7 +22,8 @@ configurator="$repo_dir/app/src/main/assets/bfu/configure-debian-systemd.sh"
 docker_network="$repo_dir/app/src/main/assets/bfu/configure-docker-network.sh"
 installer="$repo_dir/app/src/main/assets/bfu/install-debian-rootfs.sh"
 runtime="$repo_dir/app/src/main/java/me/aroxu/dawnshell/BfuRuntime.java"
-bootstrap_builder="$repo_dir/scripts/build-bootstrap-runtime.sh"
+bootstrap_builder="$repo_dir/buildSrc/src/main/kotlin/me/aroxu/dawnshell/gradle/BfuRuntime.kt"
+bfu_assets_dir="${DAWNSHELL_BFU_ASSETS_DIR:-$repo_dir/app/build/generated/assets/assembleBfuRuntimeAssets/bfu}"
 
 for required in "$guard_header" "$guard_source" "$launcher" "$configurator" \
         "$docker_network" "$installer" "$runtime" "$bootstrap_builder" \
@@ -78,11 +79,11 @@ grep -Fq 'dawnshell-fdguard $BIN/chroot' "$installer"
 
 # The binary must be built for every supported ABI and provisioned to Device
 # Protected Storage.
-grep -Fq 'build_fdguard' "$bootstrap_builder"
+grep -Fq 'dawnshell_fdguard.c' "$bootstrap_builder"
 grep -Fq 'dawnshell-fdguard' "$runtime"
 
 for abi in armeabi-v7a arm64-v8a x86_64; do
-    binary="$repo_dir/app/src/main/assets/bfu/bin/$abi/dawnshell-fdguard"
+    binary="$bfu_assets_dir/bin/$abi/dawnshell-fdguard"
     test -s "$binary"
     # ELF magic keeps a stray text file from being shipped as an executable.
     magic="$(head -c 4 "$binary" | od -An -tx1 | tr -d ' \n')"

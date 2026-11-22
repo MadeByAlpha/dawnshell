@@ -8,6 +8,7 @@ ndk_codec="$repo_dir/app/src/main/cpp/dawnshell_codec_ndk.c"
 transport="$repo_dir/app/src/main/cpp/dawnshell_codec_transport.h"
 namespace_launcher="$repo_dir/app/src/main/cpp/bfu_namespace_probe.c"
 runtime="$repo_dir/app/src/main/java/me/aroxu/dawnshell/BfuRuntime.java"
+bfu_assets_dir="${DAWNSHELL_BFU_ASSETS_DIR:-$repo_dir/app/build/generated/assets/assembleBfuRuntimeAssets/bfu}"
 service="$repo_dir/app/src/main/java/me/aroxu/dawnshell/HardwareCodecService.java"
 configurator="$repo_dir/app/src/main/assets/bfu/configure-debian-systemd.sh"
 ffmpeg_adapter="$repo_dir/app/src/main/assets/bfu/dawnshell-codec-ffmpeg.pl"
@@ -107,7 +108,7 @@ if [[ "$(uname -s)" == Linux* ]]; then
 fi
 
 for abi in armeabi-v7a arm64-v8a x86_64; do
-    directory="$repo_dir/app/src/main/assets/bfu/bin/$abi"
+    directory="$bfu_assets_dir/bin/$abi"
     test -s "$directory/dawnshell-codec"
     test -s "$directory/dawnshell-codec-worker"
     grep -Fqx 'dawnshell_codec_protocol=1' "$directory/runtime.properties"
